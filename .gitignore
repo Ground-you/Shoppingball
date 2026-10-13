@@ -1,0 +1,35 @@
+# Environment Variables (절대 커밋 금지)
+.env
+.env.backup
+.env.*.local
+.env.production
+
+# Dependencies (용량 큰 패키지 폴더)
+/node_modules
+/vendor
+
+# Build outputs & Cache
+/public/build
+/public/hot
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+!/storage/logs/.gitignore
+
+# IDE & OS Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Database & Storage
+/*.sqlite
+/storage/*.key
