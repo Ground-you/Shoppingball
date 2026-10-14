@@ -94,8 +94,7 @@ erDiagram
 <details>
 <summary>컬럼·전체 ERD가 필요할 때</summary>
 
-- DB 툴(HeidiSQL 등)에서 **역공학 다이어그램**을 쓰거나, `php artisan schema:dump` 후 팀 내부 문서에 두는 편이 README보다 낫습니다.
-- Mermaid에 컬럼을 모두 넣으면 GitHub 렌더링이 깨지고 스크롤이 길어집니다. 꼭 코드로 관리하려면 **도메인마다 파일을 나누고** (`docs/erd-auth.md` 등) README에서는 위 요약만 링크하세요.
+- 깃허브 schema_mermaid.md 파일을 찾아가세요.
 
 </details>
 
