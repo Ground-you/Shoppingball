@@ -2,13 +2,12 @@ import './bootstrap';
 import '../css/app.css';
 
 import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import router from './router';
-import App from './App.vue';
+import Home from './Pages/Home.vue';
 
-const app = createApp(App);
+const pages = { Home };
 
-app.use(createPinia());
-app.use(router);
+const root = document.getElementById('app');
+const page = JSON.parse(root?.dataset.page || '{}');
+const component = pages[page.component] || Home;
 
-app.mount('#app');
+createApp(component, page).mount(root);
