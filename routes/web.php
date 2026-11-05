@@ -6,6 +6,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Seller\AccountController;
 use App\Http\Controllers\Seller\AuthController as SellerAuthController;
 use App\Http\Controllers\Seller\DashboardController;
+use App\Http\Controllers\Seller\InventoryController;
 use App\Http\Controllers\Seller\ProductController as SellerProductController;
 use App\Http\Controllers\Seller\StoreController;
 use App\Http\Controllers\StorefrontProductController;
@@ -46,6 +47,7 @@ Route::prefix('seller')->name('seller.')->group(function () {
     Route::middleware('auth:seller')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('home');
         Route::post('/logout', [SellerAuthController::class, 'logout'])->name('logout');
+
         Route::get('/profile', [AccountController::class, 'edit'])->name('profile');
         Route::patch('/profile', [AccountController::class, 'update'])->name('profile.update');
         Route::patch('/password', [AccountController::class, 'password'])->name('password');
@@ -62,5 +64,8 @@ Route::prefix('seller')->name('seller.')->group(function () {
         Route::post('/products/{product}', [SellerProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{product}', [SellerProductController::class, 'destroy'])->name('products.destroy');
         Route::get('/products/{product}/preview', [SellerProductController::class, 'preview'])->name('products.preview');
+
+        Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory');
+        Route::patch('/inventory/{sku}', [InventoryController::class, 'update'])->name('inventory.update');
     });
 });
