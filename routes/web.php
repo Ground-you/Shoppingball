@@ -6,6 +6,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Seller\AccountController;
 use App\Http\Controllers\Seller\AuthController as SellerAuthController;
 use App\Http\Controllers\Seller\DashboardController;
+use App\Http\Controllers\Seller\StoreController;
 use Illuminate\Support\Facades\Route;
 
 // 홈 인덱스
@@ -45,5 +46,8 @@ Route::prefix('seller')->name('seller.')->group(function () {
         Route::patch('/profile', [AccountController::class, 'update'])->name('profile.update');
         Route::patch('/password', [AccountController::class, 'password'])->name('password');
         Route::post('/withdraw', [AccountController::class, 'withdraw'])->name('withdraw');
+
+        Route::get('/store', [StoreController::class, 'edit'])->name('store');
+        Route::post('/store', [StoreController::class, 'update'])->name('store.update');
     });
 });

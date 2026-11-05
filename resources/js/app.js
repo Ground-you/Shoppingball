@@ -10,6 +10,7 @@ import Profile from './Pages/Profile.vue';
 import SellerLogin from './Pages/Seller/Login.vue';
 import SellerDashboard from './Pages/Seller/Dashboard.vue';
 import SellerProfile from './Pages/Seller/Profile.vue';
+import SellerStore from './Pages/Seller/Store.vue';
 
 const pages = {
     Home,
@@ -20,6 +21,7 @@ const pages = {
     SellerLogin,
     SellerDashboard,
     SellerProfile,
+    SellerStore,
 };
 
 const root = document.getElementById('app');
