@@ -13,8 +13,17 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->redirectGuestsTo(fn () => route('login'));
-        $middleware->redirectUsersTo(fn () => route('home'));
+        $middleware->redirectGuestsTo(function (Request $request) {
+            return $request->is('seller', 'seller/*')
+                ? route('seller.login')
+                : route('login');
+        });
+
+        $middleware->redirectUsersTo(function (Request $request) {
+            return $request->is('seller', 'seller/*')
+                ? route('seller.home')
+                : route('home');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Buyer;
+use App\Models\SellerMember;
 use App\Models\User;
 
 return [
@@ -48,6 +49,11 @@ return [
             'driver' => 'session',
             'provider' => 'buyers',
         ],
+
+        'seller' => [
+            'driver' => 'session',
+            'provider' => 'seller_members',
+        ],
     ],
 
     /*
@@ -76,6 +82,11 @@ return [
         'buyers' => [
             'driver' => 'eloquent',
             'model' => Buyer::class,
+        ],
+
+        'seller_members' => [
+            'driver' => 'eloquent',
+            'model' => SellerMember::class,
         ],
 
         // 'users' => [

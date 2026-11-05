@@ -63,6 +63,7 @@ defineProps({
                 <button type="button">이용약관</button>
                 <button type="button">개인정보처리방침</button>
                 <button type="button">고객센터</button>
+                <a href="/seller" class="font-bold text-brand">판매자센터</a>
                 <p class="w-full">포트폴리오용 화면입니다. 상품과 가격은 예시입니다.</p>
             </div>
         </footer>

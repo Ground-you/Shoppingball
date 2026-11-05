@@ -3,6 +3,9 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Seller\AccountController;
+use App\Http\Controllers\Seller\AuthController as SellerAuthController;
+use App\Http\Controllers\Seller\DashboardController;
 use Illuminate\Support\Facades\Route;
 
 // 홈 인덱스
@@ -27,4 +30,20 @@ Route::middleware('auth:buyer')->group(function () {
     Route::patch('/mypage/payment-methods/{paymentMethod}', [ProfileController::class, 'updatePaymentMethod'])->name('mypage.payments.update');
     Route::delete('/mypage/payment-methods/{paymentMethod}', [ProfileController::class, 'destroyPaymentMethod'])->name('mypage.payments.destroy');
     Route::post('/withdraw', [AuthController::class, 'withdraw'])->name('withdraw.store');
+});
+
+Route::prefix('seller')->name('seller.')->group(function () {
+    Route::middleware('guest:seller')->group(function () {
+        Route::get('/login', [SellerAuthController::class, 'showLogin'])->name('login');
+        Route::post('/login', [SellerAuthController::class, 'login'])->name('login.store');
+    });
+
+    Route::middleware('auth:seller')->group(function () {
+        Route::get('/', [DashboardController::class, 'index'])->name('home');
+        Route::post('/logout', [SellerAuthController::class, 'logout'])->name('logout');
+        Route::get('/profile', [AccountController::class, 'edit'])->name('profile');
+        Route::patch('/profile', [AccountController::class, 'update'])->name('profile.update');
+        Route::patch('/password', [AccountController::class, 'password'])->name('password');
+        Route::post('/withdraw', [AccountController::class, 'withdraw'])->name('withdraw');
+    });
 });

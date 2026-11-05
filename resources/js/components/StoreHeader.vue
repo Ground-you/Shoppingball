@@ -32,6 +32,8 @@ const logout = async () => {
                 <button type="submit" class="bg-brand px-7 text-sm font-bold text-white">검색</button>
             </form>
 
+            <a href="/seller" class="hidden shrink-0 text-[12px] font-bold text-brand lg:inline">판매자센터</a>
+
             <div class="hidden items-center gap-5 text-[12px] text-neutral-600 lg:flex">
                 <a v-if="!buyer" href="/login" class="flex flex-col items-center gap-1">
                     <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.2" /><path d="M5 19c1.4-3 3.8-4.5 7-4.5s5.6 1.5 7 4.5" /></svg>
