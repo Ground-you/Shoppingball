@@ -6,7 +6,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Seller\AccountController;
 use App\Http\Controllers\Seller\AuthController as SellerAuthController;
 use App\Http\Controllers\Seller\DashboardController;
+use App\Http\Controllers\Seller\ProductController as SellerProductController;
 use App\Http\Controllers\Seller\StoreController;
+use App\Http\Controllers\StorefrontProductController;
 use Illuminate\Support\Facades\Route;
 
 // 홈 인덱스
@@ -33,6 +35,8 @@ Route::middleware('auth:buyer')->group(function () {
     Route::post('/withdraw', [AuthController::class, 'withdraw'])->name('withdraw.store');
 });
 
+Route::get('/products/{product}', [StorefrontProductController::class, 'show'])->name('products.show');
+
 Route::prefix('seller')->name('seller.')->group(function () {
     Route::middleware('guest:seller')->group(function () {
         Route::get('/login', [SellerAuthController::class, 'showLogin'])->name('login');
@@ -49,5 +53,14 @@ Route::prefix('seller')->name('seller.')->group(function () {
 
         Route::get('/store', [StoreController::class, 'edit'])->name('store');
         Route::post('/store', [StoreController::class, 'update'])->name('store.update');
+
+        Route::get('/products', [SellerProductController::class, 'index'])->name('products.index');
+        Route::get('/products/create', [SellerProductController::class, 'create'])->name('products.create');
+        Route::post('/products', [SellerProductController::class, 'store'])->name('products.store');
+        Route::post('/products/bulk', [SellerProductController::class, 'bulk'])->name('products.bulk');
+        Route::get('/products/{product}/edit', [SellerProductController::class, 'edit'])->name('products.edit');
+        Route::post('/products/{product}', [SellerProductController::class, 'update'])->name('products.update');
+        Route::delete('/products/{product}', [SellerProductController::class, 'destroy'])->name('products.destroy');
+        Route::get('/products/{product}/preview', [SellerProductController::class, 'preview'])->name('products.preview');
     });
 });

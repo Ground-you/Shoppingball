@@ -11,6 +11,9 @@ import SellerLogin from './Pages/Seller/Login.vue';
 import SellerDashboard from './Pages/Seller/Dashboard.vue';
 import SellerProfile from './Pages/Seller/Profile.vue';
 import SellerStore from './Pages/Seller/Store.vue';
+import SellerProducts from './Pages/Seller/Products.vue';
+import SellerProductForm from './Pages/Seller/ProductForm.vue';
+import ProductDetail from './Pages/ProductDetail.vue';
 
 const pages = {
     Home,
@@ -18,10 +21,13 @@ const pages = {
     Register,
     Withdraw,
     Profile,
+    ProductDetail,
     SellerLogin,
     SellerDashboard,
     SellerProfile,
     SellerStore,
+    SellerProducts,
+    SellerProductForm,
 };
 
 const root = document.getElementById('app');

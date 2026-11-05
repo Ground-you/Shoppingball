@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Product;
+use App\Support\CatalogStatus;
+use App\Support\ProductView;
 use Illuminate\Support\Facades\Auth;
 
 class HomeController extends Controller
@@ -38,10 +41,17 @@ class HomeController extends Controller
             ]);
         }
 
+        $sellerSection = $this->sellerSection();
+        if ($sellerSection) {
+            $sections->prepend($sellerSection);
+        }
+
+        $buyer = Auth::guard('buyer')->user();
+
         return view('app', [
             'page' => [
                 'component' => 'Home',
-                'buyer' => ($buyer = Auth::guard('buyer')->user()) ? [
+                'buyer' => $buyer ? [
                     'loginId' => $buyer->login_id,
                     'name' => $buyer->buyer_name,
                     'nickname' => $buyer->nickname,
@@ -57,6 +67,39 @@ class HomeController extends Controller
                 'sections' => $sections->values(),
             ],
         ]);
+    }
+
+    private function sellerSection(): ?array
+    {
+        $onSale = CatalogStatus::findId('PRODUCT_SALE', 'ON_SALE');
+        $approved = CatalogStatus::findId('PRODUCT_APPROVAL', 'APPROVED');
+        $open = CatalogStatus::findId('STORE', 'OPEN');
+
+        if (! $onSale || ! $approved || ! $open) {
+            return null;
+        }
+
+        $products = Product::query()
+            ->with('images')
+            ->where('sale_status_id', $onSale)
+            ->where('approval_status_id', $approved)
+            ->whereHas('store', function ($query) use ($open) {
+                $query->where('operation_status_id', $open)->whereHas('seller');
+            })
+            ->latest()
+            ->limit(12)
+            ->get();
+
+        if ($products->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'id' => 'seller-products',
+            'title' => '판매자 상품',
+            'tone' => 'plain',
+            'products' => $products->map(fn (Product $product) => ProductView::card($product))->values()->all(),
+        ];
     }
 
     private function presentMany($products): array
