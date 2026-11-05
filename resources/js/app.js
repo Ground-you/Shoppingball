@@ -6,8 +6,9 @@ import Home from './Pages/Home.vue';
 import Login from './Pages/Login.vue';
 import Register from './Pages/Register.vue';
 import Withdraw from './Pages/Withdraw.vue';
+import Profile from './Pages/Profile.vue';
 
-const pages = { Home, Login, Register, Withdraw };
+const pages = { Home, Login, Register, Withdraw, Profile };
 
 const root = document.getElementById('app');
 const page = JSON.parse(root?.dataset.page || '{}');
