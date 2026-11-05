@@ -3,8 +3,11 @@ import '../css/app.css';
 
 import { createApp } from 'vue';
 import Home from './Pages/Home.vue';
+import Login from './Pages/Login.vue';
+import Register from './Pages/Register.vue';
+import Withdraw from './Pages/Withdraw.vue';
 
-const pages = { Home };
+const pages = { Home, Login, Register, Withdraw };
 
 const root = document.getElementById('app');
 const page = JSON.parse(root?.dataset.page || '{}');

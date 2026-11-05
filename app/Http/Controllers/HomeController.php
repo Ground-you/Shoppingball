@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Facades\Auth;
+
 class HomeController extends Controller
 {
     // 홈 인덱스. 상품은 resources/data/catalog.php, 사진은 public/images 에서 읽는다.
@@ -39,7 +41,11 @@ class HomeController extends Controller
         return view('app', [
             'page' => [
                 'component' => 'Home',
-                'buyer' => null,
+                'buyer' => ($buyer = Auth::guard('buyer')->user()) ? [
+                    'loginId' => $buyer->login_id,
+                    'name' => $buyer->buyer_name,
+                    'nickname' => $buyer->nickname,
+                ] : null,
                 'shortcuts' => ['오늘도착', '신선마켓', '골드딜', '기획전', '해외직구', '브랜드특가'],
                 'categories' => ['패션의류', '뷰티', '식품', '주방용품', '생활용품', '가전디지털', '스포츠', '완구', '반려용품', '자동차용품'],
                 'banner' => $catalog['banner'],
