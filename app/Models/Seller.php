@@ -21,7 +21,7 @@ class Seller extends Model
         'settlement_bank_name',
         'settlement_account_number_enc',
         'settlement_account_holder',
-        'status_id',
+        'status',
         'reviewed_by_admin_id',
         'reviewed_at',
         'reject_reason',
@@ -42,10 +42,5 @@ class Seller extends Model
     public function stores(): HasMany
     {
         return $this->hasMany(Store::class);
-    }
-
-    public function status()
-    {
-        return $this->belongsTo(Status::class);
     }
 }

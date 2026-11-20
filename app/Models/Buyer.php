@@ -17,7 +17,7 @@ class Buyer extends Authenticatable
         'email',
         'phone',
         'marketing_consent',
-        'status_id',
+        'status',
         'last_login_at',
     ];
 

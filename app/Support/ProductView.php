@@ -62,8 +62,8 @@ class ProductView
             'regularPrice' => $regular,
             'salePrice' => $sale,
             'discount' => self::discount($regular, $sale),
-            'statusName' => $product->saleStatus?->status_name,
-            'statusCode' => $product->saleStatus?->status_code,
+            'statusName' => StatusLabel::name('sale', $product->sale_status),
+            'statusCode' => $product->sale_status,
             'images' => $images,
             'options' => $product->skus->map(fn ($sku) => [
                 'id' => $sku->id,
@@ -71,7 +71,7 @@ class ProductView
                 'additionalPrice' => self::money($sku->additional_price),
                 'price' => $sale + self::money($sku->additional_price),
                 'stock' => $sku->stock_quantity,
-                'soldOut' => $sku->status?->status_code === 'SOLD_OUT',
+                'soldOut' => $sku->status === 'SOLD_OUT',
             ])->values()->all(),
         ];
     }

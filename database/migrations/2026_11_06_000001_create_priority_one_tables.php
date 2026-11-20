@@ -12,23 +12,13 @@ return new class extends Migration
         Schema::dropIfExists('home_sections');
         Schema::dropIfExists('products');
 
-        Schema::create('statuses', function (Blueprint $table) {
-            $table->id()->comment('상태 ID');
-            $table->string('status_group', 50)->comment('상태 그룹(ORDER, PAYMENT 등)');
-            $table->string('status_code', 50)->comment('상태 코드');
-            $table->string('status_name', 100)->comment('상태명');
-            $table->integer('display_order')->default(0)->comment('표시 순서');
-            $table->timestamps();
-            $table->unique(['status_group', 'status_code']);
-        });
-
         Schema::create('admin_accounts', function (Blueprint $table) {
             $table->id()->comment('관리자 ID');
             $table->string('login_id', 50)->unique()->comment('로그인 ID');
             $table->string('password_hash')->comment('비밀번호 해시');
             $table->string('admin_name', 50)->comment('관리자명');
             $table->string('email', 100)->unique()->comment('이메일');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('status', 20)->default('ACTIVE')->comment('상태: ACTIVE(활성) / LOCKED(잠금)');
             $table->timestamp('last_login_at')->nullable()->comment('마지막 로그인');
             $table->timestamps();
             $table->softDeletes();
@@ -56,7 +46,7 @@ return new class extends Migration
             $table->id()->comment('브랜드 ID');
             $table->string('brand_name', 100)->comment('브랜드명');
             $table->string('logo_url', 500)->nullable()->comment('로고 URL');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('status', 20)->default('ACTIVE')->comment('상태: ACTIVE(사용) / INACTIVE(중지)');
             $table->timestamps();
         });
 
@@ -70,7 +60,7 @@ return new class extends Migration
             $table->string('phone', 30)->nullable()->comment('휴대폰');
             $table->boolean('marketing_consent')->default(false)->comment('마케팅 수신 동의');
             $table->timestamp('email_verified_at')->nullable()->comment('이메일 인증일시');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('status', 20)->default('ACTIVE')->comment('상태: ACTIVE(정상) / DORMANT(휴면) / SUSPENDED(정지) / WITHDRAWN(탈퇴)');
             $table->timestamp('last_login_at')->nullable()->comment('마지막 로그인');
             $table->timestamps();
             $table->softDeletes();
@@ -88,7 +78,7 @@ return new class extends Migration
             $table->string('settlement_bank_name', 50)->nullable()->comment('정산 은행');
             $table->string('settlement_account_number_enc')->nullable()->comment('정산 계좌번호(암호화)');
             $table->string('settlement_account_holder', 50)->nullable()->comment('예금주');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('status', 20)->default('PENDING')->comment('상태: PENDING(심사중) / APPROVED(승인) / REJECTED(반려) / SUSPENDED(정지) / WITHDRAWN(탈퇴)');
             $table->foreignId('reviewed_by_admin_id')->nullable()->constrained('admin_accounts')->nullOnDelete()->comment('가입 승인 관리자 ID');
             $table->timestamp('reviewed_at')->nullable()->comment('심사일시');
             $table->string('reject_reason')->nullable()->comment('반려 사유');
@@ -102,8 +92,8 @@ return new class extends Migration
             $table->string('login_email', 100)->unique()->comment('로그인 이메일');
             $table->string('password_hash')->comment('비밀번호 해시');
             $table->string('member_name', 50)->comment('멤버 이름');
-            $table->string('member_role', 20)->default('OWNER')->comment('OWNER / STAFF');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('member_role', 20)->default('OWNER')->comment('역할: OWNER(대표) / STAFF(직원)');
+            $table->string('status', 20)->default('ACTIVE')->comment('상태: ACTIVE(활성) / LOCKED(잠금)');
             $table->timestamp('last_login_at')->nullable()->comment('마지막 로그인');
             $table->timestamps();
             $table->softDeletes();
@@ -116,7 +106,7 @@ return new class extends Migration
             $table->string('logo_url', 500)->nullable()->comment('로고 URL');
             $table->string('banner_image_url', 500)->nullable()->comment('배너 이미지 URL');
             $table->text('introduction')->nullable()->comment('스토어 소개');
-            $table->foreignId('operation_status_id')->constrained('statuses')->comment('운영 상태 ID');
+            $table->string('operation_status', 20)->default('OPEN')->comment('운영 상태: OPEN(영업중) / CLOSED(휴업) / SUSPENDED(운영정지)');
             $table->timestamps();
             $table->softDeletes();
         });
@@ -149,8 +139,8 @@ return new class extends Migration
             $table->text('description')->nullable()->comment('상품 설명');
             $table->decimal('regular_price', 12, 2)->comment('정상가');
             $table->decimal('sale_price', 12, 2)->comment('판매가(할인가)');
-            $table->foreignId('sale_status_id')->constrained('statuses')->comment('판매 상태 ID');
-            $table->foreignId('approval_status_id')->constrained('statuses')->comment('승인 상태 ID');
+            $table->string('sale_status', 20)->default('ON_SALE')->comment('판매 상태: ON_SALE(판매중) / SOLD_OUT(품절) / STOPPED(판매중지)');
+            $table->string('approval_status', 20)->default('PENDING')->comment('승인 상태: PENDING(승인대기) / APPROVED(승인) / REJECTED(반려)');
             $table->string('rejected_reason')->nullable()->comment('반려 사유');
             $table->timestamps();
             $table->softDeletes();
@@ -163,7 +153,7 @@ return new class extends Migration
             $table->string('option_name', 200)->default('기본')->comment('옵션명');
             $table->decimal('additional_price', 12, 2)->default(0)->comment('추가 금액');
             $table->integer('stock_quantity')->default(0)->comment('재고 수량');
-            $table->foreignId('status_id')->constrained('statuses')->comment('상태 ID');
+            $table->string('status', 20)->default('ON_SALE')->comment('상태: ON_SALE(판매중) / SOLD_OUT(품절) / STOPPED(판매중지)');
             $table->integer('sort_order')->default(0)->comment('정렬 순서');
             $table->timestamps();
             $table->softDeletes();
@@ -205,7 +195,7 @@ return new class extends Migration
             $table->id()->comment('주문 ID');
             $table->string('order_number', 30)->unique()->comment('주문번호');
             $table->foreignId('buyer_id')->constrained()->comment('구매자 ID');
-            $table->foreignId('order_status_id')->constrained('statuses')->comment('주문 상태 ID');
+            $table->string('order_status', 20)->default('PENDING_PAYMENT')->comment('주문 상태: PENDING_PAYMENT(결제대기) / PAID(결제완료) / PREPARING(상품준비중) / SHIPPING(배송중) / DELIVERED(배송완료) / CONFIRMED(구매확정) / CANCELED(취소)');
             $table->string('recipient_name', 50)->comment('수령인');
             $table->string('recipient_phone', 30)->comment('수령인 연락처');
             $table->string('shipping_postal_code', 10)->comment('배송 우편번호');
@@ -231,7 +221,7 @@ return new class extends Migration
             $table->decimal('unit_price', 12, 2)->comment('단가');
             $table->integer('quantity')->comment('수량');
             $table->decimal('item_amount', 12, 2)->comment('금액');
-            $table->foreignId('item_status_id')->constrained('statuses')->comment('주문상품 상태 ID');
+            $table->string('item_status', 20)->default('PREPARING')->comment('주문상품 상태: PREPARING(준비중) / SHIPPING(배송중) / DELIVERED(배송완료) / CONFIRMED(구매확정) / CANCELED(취소) / RETURNED(반품)');
             $table->timestamp('purchase_confirmed_at')->nullable()->comment('구매확정일시');
             $table->timestamps();
         });
@@ -241,7 +231,7 @@ return new class extends Migration
             $table->foreignId('order_id')->constrained()->comment('주문 ID');
             $table->string('payment_method', 30)->comment('결제 수단');
             $table->decimal('payment_amount', 12, 2)->comment('결제 금액');
-            $table->foreignId('payment_status_id')->constrained('statuses')->comment('결제 상태 ID');
+            $table->string('payment_status', 20)->default('PENDING')->comment('결제 상태: PENDING(대기) / PAID(성공) / FAILED(실패) / CANCELED(취소)');
             $table->string('transaction_id', 100)->nullable()->comment('PG 거래 ID');
             $table->timestamp('paid_at')->nullable()->comment('결제일시');
             $table->timestamp('failed_at')->nullable()->comment('실패일시');
@@ -254,8 +244,8 @@ return new class extends Migration
             $table->id()->comment('클레임 ID');
             $table->string('claim_number', 30)->unique()->comment('클레임 번호');
             $table->foreignId('order_id')->constrained()->comment('주문 ID');
-            $table->string('claim_type', 20)->comment('CANCEL / RETURN / EXCHANGE');
-            $table->foreignId('claim_status_id')->constrained('statuses')->comment('클레임 상태 ID');
+            $table->string('claim_type', 20)->comment('유형: CANCEL(취소) / RETURN(반품) / EXCHANGE(교환)');
+            $table->string('claim_status', 20)->default('REQUESTED')->comment('상태: REQUESTED(요청) / APPROVED(승인) / REJECTED(거절) / PICKING_UP(수거중) / COMPLETED(완료)');
             $table->string('reason_code', 30)->comment('사유 코드');
             $table->string('reason_detail', 500)->nullable()->comment('사유 상세');
             $table->string('pickup_postal_code', 10)->nullable()->comment('수거지 우편번호');
@@ -286,9 +276,9 @@ return new class extends Migration
             $table->foreignId('store_id')->constrained()->comment('스토어 ID');
             $table->foreignId('order_claim_id')->nullable()->constrained()->nullOnDelete()->comment('클레임 ID');
             $table->foreignId('carrier_id')->nullable()->constrained()->nullOnDelete()->comment('택배사 ID');
-            $table->string('shipment_type', 20)->comment('OUTBOUND / RETURN / EXCHANGE');
+            $table->string('shipment_type', 20)->default('OUTBOUND')->comment('유형: OUTBOUND(출고) / RETURN(반품 수거) / EXCHANGE(교환 재발송)');
             $table->string('tracking_number', 50)->nullable()->comment('운송장 번호');
-            $table->foreignId('shipment_status_id')->constrained('statuses')->comment('배송 상태 ID');
+            $table->string('shipment_status', 20)->default('PREPARING')->comment('배송 상태: PREPARING(준비중) / SHIPPING(배송중) / DELIVERED(배송완료)');
             $table->timestamp('dispatched_at')->nullable()->comment('발송일시');
             $table->timestamp('delivered_at')->nullable()->comment('배송완료일시');
             $table->timestamps();
@@ -320,7 +310,7 @@ return new class extends Migration
             $table->foreignId('payment_id')->constrained()->comment('결제 ID');
             $table->foreignId('order_claim_id')->nullable()->constrained()->nullOnDelete()->comment('클레임 ID');
             $table->decimal('refund_amount', 12, 2)->comment('환불 금액');
-            $table->foreignId('refund_status_id')->constrained('statuses')->comment('환불 상태 ID');
+            $table->string('refund_status', 20)->default('REQUESTED')->comment('환불 상태: REQUESTED(요청) / PROCESSING(처리중) / COMPLETED(완료) / FAILED(실패)');
             $table->string('reason')->nullable()->comment('사유');
             $table->timestamp('refunded_at')->nullable()->comment('환불일시');
             $table->string('failure_message')->nullable()->comment('실패 메시지');
@@ -338,7 +328,7 @@ return new class extends Migration
             $table->decimal('commission_amount', 14, 2)->default(0)->comment('수수료 합계');
             $table->decimal('refund_amount', 14, 2)->default(0)->comment('환불 합계');
             $table->decimal('settlement_amount', 14, 2)->default(0)->comment('정산 금액');
-            $table->foreignId('settlement_status_id')->constrained('statuses')->comment('정산 상태 ID');
+            $table->string('settlement_status', 20)->default('PENDING')->comment('정산 상태: PENDING(정산대기) / APPROVED(승인) / PAID(지급완료)');
             $table->foreignId('approved_by_admin_id')->nullable()->constrained('admin_accounts')->nullOnDelete()->comment('승인 관리자 ID');
             $table->timestamp('approved_at')->nullable()->comment('승인일시');
             $table->timestamp('completed_at')->nullable()->comment('지급 완료일시');
@@ -372,7 +362,7 @@ return new class extends Migration
 
         Schema::create('faqs', function (Blueprint $table) {
             $table->id()->comment('FAQ ID');
-            $table->string('question', 300)->comment('질문');
+            $table->text('question')->comment('질문');
             $table->text('answer')->comment('답변');
             $table->integer('display_order')->default(0)->comment('표시 순서');
             $table->boolean('is_public')->default(true)->comment('공개 여부');
@@ -436,6 +426,5 @@ return new class extends Migration
         Schema::dropIfExists('categories');
         Schema::dropIfExists('carriers');
         Schema::dropIfExists('admin_accounts');
-        Schema::dropIfExists('statuses');
     }
 };

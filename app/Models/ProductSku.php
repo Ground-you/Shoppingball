@@ -16,7 +16,7 @@ class ProductSku extends Model
         'option_name',
         'additional_price',
         'stock_quantity',
-        'status_id',
+        'status',
         'sort_order',
     ];
 
@@ -30,10 +30,5 @@ class ProductSku extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
-    }
-
-    public function status(): BelongsTo
-    {
-        return $this->belongsTo(Status::class);
     }
 }

@@ -19,8 +19,8 @@ class Product extends Model
         'description',
         'regular_price',
         'sale_price',
-        'sale_status_id',
-        'approval_status_id',
+        'sale_status',
+        'approval_status',
         'rejected_reason',
     ];
 
@@ -45,16 +45,6 @@ class Product extends Model
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
-    }
-
-    public function saleStatus(): BelongsTo
-    {
-        return $this->belongsTo(Status::class, 'sale_status_id');
-    }
-
-    public function approvalStatus(): BelongsTo
-    {
-        return $this->belongsTo(Status::class, 'approval_status_id');
     }
 
     public function images(): HasMany

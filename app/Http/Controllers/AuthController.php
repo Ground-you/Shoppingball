@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Buyer;
-use App\Models\Status;
 use App\Support\BuyerInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -74,7 +73,7 @@ class AuthController extends Controller
             'email' => $data['email'],
             'phone' => $data['phone'] ?: null,
             'marketing_consent' => (bool) ($data['marketing_consent'] ?? false),
-            'status_id' => $this->buyerStatus('ACTIVE', '활성', 1)->id,
+            'status' => 'ACTIVE',
         ]);
 
         Auth::guard('buyer')->login($buyer);
@@ -117,7 +116,7 @@ class AuthController extends Controller
         }
 
         $buyer->forceFill([
-            'status_id' => $this->buyerStatus('WITHDRAWN', '탈퇴', 2)->id,
+            'status' => 'WITHDRAWN',
         ])->save();
 
         $hasHistory = DB::table('orders')->where('buyer_id', $buyer->id)->exists()
@@ -157,13 +156,5 @@ class AuthController extends Controller
                 'nickname' => $buyer->nickname,
             ] : null,
         ];
-    }
-
-    private function buyerStatus(string $code, string $name, int $order): Status
-    {
-        return Status::query()->firstOrCreate(
-            ['status_group' => 'BUYER', 'status_code' => $code],
-            ['status_name' => $name, 'display_order' => $order],
-        );
     }
 }

@@ -17,17 +17,12 @@ class Store extends Model
         'logo_url',
         'banner_image_url',
         'introduction',
-        'operation_status_id',
+        'operation_status',
     ];
 
     public function seller(): BelongsTo
     {
         return $this->belongsTo(Seller::class);
-    }
-
-    public function operationStatus(): BelongsTo
-    {
-        return $this->belongsTo(Status::class, 'operation_status_id');
     }
 
     public function products(): HasMany

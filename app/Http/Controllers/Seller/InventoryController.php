@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Controller;
 use App\Models\ProductSku;
-use App\Support\CatalogStatus;
 use App\Support\ProductView;
 use App\Support\SellerContext;
 use App\Support\SellerPage;
@@ -17,7 +16,7 @@ class InventoryController extends Controller
     {
         $store = SellerContext::store();
         $rows = ProductSku::query()
-            ->with(['product', 'status'])
+            ->with(['product'])
             ->whereHas('product', fn ($query) => $query->where('store_id', $store->id))
             ->get()
             ->sortBy(fn (ProductSku $sku) => sprintf('%s-%04d', $sku->product?->product_name, $sku->sort_order))
@@ -34,7 +33,7 @@ class InventoryController extends Controller
     public function update(Request $request, ProductSku $sku)
     {
         $store = SellerContext::store();
-        $sku->load('product', 'status');
+        $sku->load('product');
         abort_unless($sku->product && $sku->product->store_id === $store->id, 404);
 
         $data = $request->validate([
@@ -56,20 +55,19 @@ class InventoryController extends Controller
         } elseif ($data['action'] === 'subtract') {
             $sku->stock_quantity = max(0, $sku->stock_quantity - max($quantity, 1));
         } elseif ($data['action'] === 'sold_out') {
-            $sku->status_id = CatalogStatus::id('SKU', 'SOLD_OUT', '품절', 2);
+            $sku->status = 'SOLD_OUT';
         } elseif ($data['action'] === 'restock') {
-            $sku->status_id = CatalogStatus::id('SKU', 'ACTIVE', '판매중', 1);
+            $sku->status = 'ON_SALE';
         }
 
         $sku->save();
-        $sku->load('status');
 
         return response()->json(['sku' => $this->present($sku)]);
     }
 
     private function present(ProductSku $sku): array
     {
-        $soldOut = $sku->status?->status_code === 'SOLD_OUT';
+        $soldOut = $sku->status === 'SOLD_OUT';
 
         return [
             'id' => $sku->id,

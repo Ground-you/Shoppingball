@@ -16,7 +16,7 @@ class SellerMember extends Authenticatable
         'password_hash',
         'member_name',
         'member_role',
-        'status_id',
+        'status',
         'last_login_at',
     ];
 
@@ -40,10 +40,5 @@ class SellerMember extends Authenticatable
     public function seller(): BelongsTo
     {
         return $this->belongsTo(Seller::class);
-    }
-
-    public function status(): BelongsTo
-    {
-        return $this->belongsTo(Status::class);
     }
 }

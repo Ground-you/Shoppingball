@@ -30,7 +30,7 @@ const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
                 ['전체 상품', counts.total],
                 ['판매중', counts.onSale],
                 ['판매중지', counts.stopped],
-                ['임시저장', counts.draft],
+                ['품절 상품', counts.soldOutProducts],
                 ['재고 5개 이하', counts.lowStock],
                 ['품절 옵션', counts.soldOut],
             ]" :key="card[0]" class="rounded-2xl border border-neutral-200 bg-white px-5 py-4">

@@ -5,13 +5,25 @@ import StoreHeader from '../Components/StoreHeader.vue';
 const props = defineProps({
     shortcuts: { type: Array, default: () => [] },
     buyer: { type: Object, default: null },
-    product: { type: Object, required: true },
-    store: { type: Object, required: true },
+    product: { type: Object, default: null },
+    store: { type: Object, default: null },
     preview: { type: Boolean, default: false },
+    deleted: { type: Boolean, default: false },
 });
 
-const active = ref(props.product.images[0]?.url || '');
+const active = ref(props.product?.images?.[0]?.url || '');
+const optionId = ref(props.product?.options?.find((option) => !option.soldOut)?.id || props.product?.options?.[0]?.id || '');
+const quantity = ref(1);
 const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
+
+const buy = () => {
+    if (!optionId.value) {
+        return;
+    }
+
+    const target = `/checkout?sku=${optionId.value}&quantity=${quantity.value}`;
+    window.location.href = props.buyer ? target : '/login';
+};
 </script>
 
 <template>
@@ -23,11 +35,16 @@ const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
             <a href="/seller/products" class="ml-2 font-bold text-brand">판매자 센터</a>
         </p>
 
-        <div v-if="store.banner" class="mx-auto max-w-[1160px] px-5 pt-6">
+        <div v-if="store?.banner" class="mx-auto max-w-[1160px] px-5 pt-6">
             <img :src="store.banner" alt="" class="h-44 w-full rounded-2xl object-cover">
         </div>
 
-        <main class="mx-auto grid max-w-[1160px] gap-8 px-5 py-8 lg:grid-cols-2">
+        <main v-if="deleted" class="mx-auto max-w-[1160px] px-5 py-24 text-center">
+            <h1 class="text-[26px] font-bold">삭제된 상품</h1>
+            <p class="mt-3 text-sm text-neutral-500">판매자가 삭제한 상품입니다.</p>
+            <a href="/" class="mt-6 inline-block text-sm font-bold text-brand">홈으로</a>
+        </main>
+        <main v-else class="mx-auto grid max-w-[1160px] gap-8 px-5 py-8 lg:grid-cols-2">
             <div>
                 <div class="overflow-hidden rounded-2xl bg-neutral-100">
                     <img v-if="active" :src="active" :alt="product.name" class="aspect-square w-full object-cover">
@@ -53,13 +70,21 @@ const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
 
                 <ul class="mt-6 divide-y divide-neutral-200 rounded-2xl border border-neutral-200">
                     <li v-for="option in product.options" :key="option.id" class="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                        <label class="flex min-w-0 flex-1 items-center gap-3">
+                            <input v-if="!preview" v-model="optionId" type="radio" :value="option.id" :disabled="option.soldOut">
                         <div>
                             <p class="font-medium">{{ option.name }}</p>
                             <p class="text-[12px] text-neutral-500">추가 {{ won(option.additionalPrice) }} · 재고 {{ option.stock }}</p>
                         </div>
                         <span class="shrink-0 font-bold">{{ option.soldOut ? '품절' : won(option.price) }}</span>
+                        </label>
                     </li>
                 </ul>
+
+                <div v-if="!preview" class="mt-4 flex gap-2">
+                    <input v-model.number="quantity" type="number" min="1" class="h-12 w-24 rounded-lg border border-neutral-300 px-3 outline-none focus:border-brand">
+                    <button type="button" class="h-12 flex-1 rounded-lg bg-brand font-bold text-white" @click="buy">구매하기</button>
+                </div>
 
                 <p v-if="product.description" class="mt-6 whitespace-pre-line text-sm leading-6 text-neutral-600">{{ product.description }}</p>
                 <p v-if="store.introduction" class="mt-6 text-sm leading-6 text-neutral-500">{{ store.introduction }}</p>

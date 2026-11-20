@@ -6,7 +6,6 @@ use App\Models\Category;
 use App\Models\Seller;
 use App\Models\SellerMember;
 use App\Models\Store;
-use App\Support\CatalogStatus;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -36,9 +35,6 @@ class SellerAccountSeeder extends Seeder
     private function account(): void
     {
         $email = 'seller@ccuppang.test';
-        $sellerStatus = CatalogStatus::id('SELLER', 'ACTIVE', '활성', 1);
-        $memberStatus = CatalogStatus::id('SELLER_MEMBER', 'ACTIVE', '활성', 1);
-        $storeStatus = CatalogStatus::id('STORE', 'OPEN', '영업중', 1);
 
         $seller = Seller::withTrashed()
             ->where('business_registration_number', '123-45-67890')
@@ -55,12 +51,12 @@ class SellerAccountSeeder extends Seeder
                 'settlement_bank_name' => '국민은행',
                 'settlement_account_number_enc' => Crypt::encryptString('12345678901234'),
                 'settlement_account_holder' => '씨씨업팡',
-                'status_id' => $sellerStatus,
+                'status' => 'APPROVED',
                 'reviewed_at' => now(),
             ]);
         } elseif ($seller->trashed()) {
             $seller->restore();
-            $seller->forceFill(['status_id' => $sellerStatus, 'reject_reason' => null])->save();
+            $seller->forceFill(['status' => 'APPROVED', 'reject_reason' => null])->save();
         }
 
         $member = SellerMember::withTrashed()->where('login_email', $email)->first();
@@ -72,7 +68,7 @@ class SellerAccountSeeder extends Seeder
                 'password_hash' => 'Seller1!',
                 'member_name' => $seller->manager_name ?: '진헌',
                 'member_role' => 'OWNER',
-                'status_id' => $memberStatus,
+                'status' => 'ACTIVE',
             ]);
         } elseif ($member->trashed()) {
             $member->restore();
@@ -80,7 +76,7 @@ class SellerAccountSeeder extends Seeder
                 'seller_id' => $seller->id,
                 'password_hash' => 'Seller1!',
                 'member_role' => 'OWNER',
-                'status_id' => $memberStatus,
+                'status' => 'ACTIVE',
             ])->save();
         }
 
@@ -92,11 +88,11 @@ class SellerAccountSeeder extends Seeder
                 'store_name' => 'ccuppang 스토어',
                 'banner_image_url' => '/images/banner.jpg',
                 'introduction' => '임시로 모든 판매 권한이 열린 스토어입니다.',
-                'operation_status_id' => $storeStatus,
+                'operation_status' => 'OPEN',
             ]);
         } elseif ($store->trashed()) {
             $store->restore();
-            $store->forceFill(['operation_status_id' => $storeStatus])->save();
+            $store->forceFill(['operation_status' => 'OPEN'])->save();
         }
     }
 }

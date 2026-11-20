@@ -6,9 +6,9 @@ use App\Models\Buyer;
 use App\Models\BuyerAddress;
 use App\Models\BuyerPaymentMethod;
 use App\Support\BuyerInput;
+use App\Support\OrderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ProfileController extends Controller
@@ -17,16 +17,6 @@ class ProfileController extends Controller
     {
         /** @var Buyer $buyer */
         $buyer = Auth::guard('buyer')->user();
-
-        $orders = DB::table('orders')
-            ->where('buyer_id', $buyer->id)
-            ->orderByDesc('ordered_at')
-            ->get();
-
-        $items = DB::table('order_items')
-            ->whereIn('order_id', $orders->pluck('id'))
-            ->get()
-            ->groupBy('order_id');
 
         return view('app', [
             'page' => [
@@ -39,20 +29,7 @@ class ProfileController extends Controller
                     'email' => $buyer->email,
                     'phone' => $buyer->phone,
                 ],
-                'orders' => $orders->map(function ($order) use ($items) {
-                    return [
-                        'id' => $order->id,
-                        'orderNumber' => $order->order_number,
-                        'orderedAt' => $order->ordered_at,
-                        'finalPaymentAmount' => $order->final_payment_amount,
-                        'items' => ($items[$order->id] ?? collect())->map(fn ($item) => [
-                            'name' => $item->product_name,
-                            'option' => $item->option_name,
-                            'quantity' => $item->quantity,
-                            'amount' => $item->item_amount,
-                        ])->values(),
-                    ];
-                })->values(),
+                'orders' => app(OrderService::class)->buyerOrders($buyer),
                 'addresses' => BuyerAddress::query()
                     ->where('buyer_id', $buyer->id)
                     ->latest()

@@ -33,7 +33,7 @@ class SellerContext
 
         return $seller->stores()->create([
             'store_name' => $seller->seller_name.' 스토어',
-            'operation_status_id' => CatalogStatus::id('STORE', 'OPEN', '영업중', 1),
+            'operation_status' => 'OPEN',
         ]);
     }
 }

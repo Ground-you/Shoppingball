@@ -124,7 +124,7 @@ const save = async () => {
                 <legend class="text-[12px] text-neutral-500">상점 운영 상태</legend>
                 <div class="mt-2 flex gap-4 text-sm">
                     <label class="flex items-center gap-2"><input v-model="form.operation_status" type="radio" value="OPEN"> 영업중</label>
-                    <label class="flex items-center gap-2"><input v-model="form.operation_status" type="radio" value="PAUSED"> 휴업</label>
+                    <label class="flex items-center gap-2"><input v-model="form.operation_status" type="radio" value="CLOSED"> 휴업</label>
                 </div>
             </fieldset>
 

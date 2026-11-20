@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
-use App\Support\CatalogStatus;
 use App\Support\ProductView;
 use Illuminate\Support\Facades\Auth;
 
@@ -71,20 +70,12 @@ class HomeController extends Controller
 
     private function sellerSection(): ?array
     {
-        $onSale = CatalogStatus::findId('PRODUCT_SALE', 'ON_SALE');
-        $approved = CatalogStatus::findId('PRODUCT_APPROVAL', 'APPROVED');
-        $open = CatalogStatus::findId('STORE', 'OPEN');
-
-        if (! $onSale || ! $approved || ! $open) {
-            return null;
-        }
-
         $products = Product::query()
             ->with('images')
-            ->where('sale_status_id', $onSale)
-            ->where('approval_status_id', $approved)
-            ->whereHas('store', function ($query) use ($open) {
-                $query->where('operation_status_id', $open)->whereHas('seller');
+            ->where('sale_status', 'ON_SALE')
+            ->where('approval_status', 'APPROVED')
+            ->whereHas('store', function ($query) {
+                $query->where('operation_status', 'OPEN')->whereHas('seller');
             })
             ->latest()
             ->limit(12)
@@ -111,6 +102,7 @@ class HomeController extends Controller
 
             return [
                 'id' => $product['image'],
+                'example' => true,
                 'name' => $product['name'],
                 'description' => $product['description'],
                 'image' => $product['image'],

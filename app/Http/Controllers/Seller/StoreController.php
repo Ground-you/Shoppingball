@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Controller;
 use App\Models\Policy;
-use App\Support\CatalogStatus;
 use App\Support\PublicUpload;
 use App\Support\SellerContext;
 use App\Support\SellerPage;
@@ -14,7 +13,7 @@ class StoreController extends Controller
 {
     public function edit()
     {
-        $store = SellerContext::store()->load('operationStatus');
+        $store = SellerContext::store();
         $policy = Policy::query()
             ->where('store_id', $store->id)
             ->orderByDesc('version_no')
@@ -27,7 +26,7 @@ class StoreController extends Controller
                 'logo' => $store->logo_url,
                 'banner' => $store->banner_image_url,
                 'introduction' => $store->introduction ?? '',
-                'operationStatus' => $store->operationStatus?->status_code === 'PAUSED' ? 'PAUSED' : 'OPEN',
+                'operationStatus' => $store->operation_status === 'CLOSED' ? 'CLOSED' : 'OPEN',
                 'shippingNotice' => $policy?->shipping_policy_notice ?? '',
                 'exchangeNotice' => $policy?->exchange_return_policy_notice ?? '',
             ],
@@ -39,7 +38,7 @@ class StoreController extends Controller
         $data = $request->validate([
             'store_name' => ['required', 'string', 'min:2', 'max:100'],
             'introduction' => ['nullable', 'string', 'max:2000'],
-            'operation_status' => ['required', 'in:OPEN,PAUSED'],
+            'operation_status' => ['required', 'in:OPEN,CLOSED'],
             'shipping_policy_notice' => ['nullable', 'string', 'max:2000'],
             'exchange_return_policy_notice' => ['nullable', 'string', 'max:2000'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
@@ -57,9 +56,7 @@ class StoreController extends Controller
         $store = SellerContext::store();
         $store->store_name = $data['store_name'];
         $store->introduction = $data['introduction'] ?: null;
-        $store->operation_status_id = $data['operation_status'] === 'PAUSED'
-            ? CatalogStatus::id('STORE', 'PAUSED', '휴업', 2)
-            : CatalogStatus::id('STORE', 'OPEN', '영업중', 1);
+        $store->operation_status = $data['operation_status'] === 'CLOSED' ? 'CLOSED' : 'OPEN';
 
         if ($request->hasFile('logo')) {
             PublicUpload::delete($store->logo_url);

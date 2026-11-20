@@ -8,8 +8,8 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductSku;
-use App\Support\CatalogStatus;
 use App\Support\ProductView;
+use App\Support\StatusLabel;
 use App\Support\PublicUpload;
 use App\Support\SellerContext;
 use App\Support\SellerPage;
@@ -26,7 +26,7 @@ class ProductController extends Controller
     {
         $store = SellerContext::store();
         $products = Product::query()
-            ->with(['images', 'skus', 'saleStatus', 'category'])
+            ->with(['images', 'skus', 'category'])
             ->where('store_id', $store->id)
             ->latest()
             ->get()
@@ -39,8 +39,8 @@ class ProductController extends Controller
                     'image' => $image?->image_url,
                     'regularPrice' => ProductView::money($product->regular_price),
                     'salePrice' => ProductView::money($product->sale_price),
-                    'status' => $product->saleStatus?->status_code,
-                    'statusName' => $product->saleStatus?->status_name,
+                    'status' => $product->sale_status,
+                    'statusName' => StatusLabel::name('sale', $product->sale_status),
                     'stock' => $product->skus->sum('stock_quantity'),
                     'category' => $product->category?->category_name,
                 ];
@@ -103,14 +103,13 @@ class ProductController extends Controller
         ]);
 
         $store = SellerContext::store();
-        $statusId = $this->saleStatusId($data['sale_status']);
 
         Product::query()
             ->where('store_id', $store->id)
             ->whereIn('id', $data['ids'])
             ->update([
-                'sale_status_id' => $statusId,
-                'approval_status_id' => CatalogStatus::id('PRODUCT_APPROVAL', 'APPROVED', '승인', 1),
+                'sale_status' => $data['sale_status'],
+                'approval_status' => 'APPROVED',
                 'rejected_reason' => null,
             ]);
 
@@ -119,7 +118,7 @@ class ProductController extends Controller
 
     public function preview(Product $product)
     {
-        $product = $this->own($product)->load(['images', 'skus.status', 'saleStatus', 'store.seller']);
+        $product = $this->own($product)->load(['images', 'skus', 'store.seller']);
         $store = $product->store;
         $policy = $store->policies()->orderByDesc('version_no')->first();
         $buyer = Auth::guard('buyer')->user();
@@ -167,8 +166,8 @@ class ProductController extends Controller
                     'description' => $data['description'] ?? null,
                     'regular_price' => $data['regular_price'],
                     'sale_price' => $data['sale_price'],
-                    'sale_status_id' => $this->saleStatusId($data['sale_status']),
-                    'approval_status_id' => CatalogStatus::id('PRODUCT_APPROVAL', 'APPROVED', '승인', 1),
+                    'sale_status' => $data['sale_status'],
+                    'approval_status' => 'APPROVED',
                     'rejected_reason' => null,
                 ];
 
@@ -229,7 +228,7 @@ class ProductController extends Controller
             'brand_name' => ['nullable', 'string', 'max:100'],
             'regular_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
             'sale_price' => ['required', 'numeric', 'min:0', 'lte:regular_price'],
-            'sale_status' => ['required', Rule::in(['ON_SALE', 'STOPPED', 'DRAFT'])],
+            'sale_status' => ['required', Rule::in(['ON_SALE', 'SOLD_OUT', 'STOPPED'])],
             'skus' => ['required', 'array', 'min:1', 'max:30'],
             'skus.*.id' => ['nullable', 'integer'],
             'skus.*.option_name' => ['required', 'string', 'max:200'],
@@ -255,8 +254,6 @@ class ProductController extends Controller
 
     private function syncSkus(Product $product, array $rows): void
     {
-        $active = CatalogStatus::id('SKU', 'ACTIVE', '판매중', 1);
-        $soldOut = CatalogStatus::id('SKU', 'SOLD_OUT', '품절', 2);
         $kept = [];
 
         foreach (array_values($rows) as $index => $row) {
@@ -264,7 +261,7 @@ class ProductController extends Controller
                 'option_name' => $row['option_name'],
                 'additional_price' => $row['additional_price'],
                 'stock_quantity' => $row['stock_quantity'],
-                'status_id' => ! empty($row['sold_out']) ? $soldOut : $active,
+                'status' => ! empty($row['sold_out']) ? 'SOLD_OUT' : 'ON_SALE',
                 'sort_order' => $index,
             ];
 
@@ -369,26 +366,17 @@ class ProductController extends Controller
 
         $brand = Brand::query()->firstOrCreate(
             ['brand_name' => $name],
-            ['status_id' => CatalogStatus::id('BRAND', 'ACTIVE', '사용', 1)],
+            ['status' => 'ACTIVE'],
         );
 
         return $brand->id;
-    }
-
-    private function saleStatusId(string $code): int
-    {
-        return match ($code) {
-            'STOPPED' => CatalogStatus::id('PRODUCT_SALE', 'STOPPED', '판매중지', 2),
-            'DRAFT' => CatalogStatus::id('PRODUCT_SALE', 'DRAFT', '임시저장', 3),
-            default => CatalogStatus::id('PRODUCT_SALE', 'ON_SALE', '판매중', 1),
-        };
     }
 
     private function own(Product $product): Product
     {
         abort_unless($product->store_id === SellerContext::store()->id, 404);
 
-        return $product->load(['images', 'skus.status', 'saleStatus', 'brand', 'category']);
+        return $product->load(['images', 'skus', 'brand', 'category']);
     }
 
     private function formProps(?Product $product): array
@@ -413,7 +401,7 @@ class ProductController extends Controller
                 'brand_name' => $product->brand?->brand_name ?? '',
                 'regular_price' => ProductView::money($product->regular_price),
                 'sale_price' => ProductView::money($product->sale_price),
-                'sale_status' => $product->saleStatus?->status_code ?? 'DRAFT',
+                'sale_status' => $product->sale_status ?: 'ON_SALE',
                 'images' => $product->images->map(fn (ProductImage $image) => [
                     'id' => $image->id,
                     'url' => $image->image_url,
@@ -424,7 +412,7 @@ class ProductController extends Controller
                     'option_name' => $sku->option_name,
                     'additional_price' => ProductView::money($sku->additional_price),
                     'stock_quantity' => $sku->stock_quantity,
-                    'sold_out' => $sku->status?->status_code === 'SOLD_OUT',
+                    'sold_out' => $sku->status === 'SOLD_OUT',
                 ])->values()->all(),
             ] : null,
         ];

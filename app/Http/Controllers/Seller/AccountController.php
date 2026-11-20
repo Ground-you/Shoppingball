@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Seller;
 
 use App\Http\Controllers\Controller;
 use App\Support\BuyerInput;
-use App\Support\CatalogStatus;
 use App\Support\SellerContext;
 use App\Support\SellerPage;
 use Illuminate\Http\Request;
@@ -27,7 +26,7 @@ class AccountController extends Controller
                 'managerName' => $seller->manager_name ?? '',
                 'representativeName' => $seller->representative_name ?? '',
                 'email' => $member->login_email,
-                'phone' => $seller->contact_phone ?? '',
+                'phone' => preg_replace('/\D/', '', (string) ($seller->contact_phone ?? '')),
                 'businessNumber' => $seller->business_registration_number,
                 'address' => $seller->business_address ?? '',
                 'bankName' => $seller->settlement_bank_name ?? '',
@@ -45,21 +44,28 @@ class AccountController extends Controller
         $data = $request->validate([
             'seller_name' => ['required', 'string', 'min:2', 'max:100'],
             'manager_name' => ['required', 'string', 'min:2', 'max:50'],
-            'representative_name' => ['nullable', 'string', 'max:50'],
+            'representative_name' => ['nullable', 'string', 'min:2', 'max:50'],
             'login_email' => ['required', 'email:rfc', 'max:100', Rule::unique('seller_members', 'login_email')->ignore($member->id)],
-            'contact_phone' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+\-]{8,20}$/'],
+            'contact_phone' => ['nullable', 'string', 'regex:/^\d+$/', 'min:8', 'max:20'],
             'business_address' => ['nullable', 'string', 'max:255'],
             'settlement_bank_name' => ['nullable', 'string', 'max:50'],
-            'settlement_account_number' => ['nullable', 'string', 'max:30', 'regex:/^[0-9\-]*$/'],
+            'settlement_account_number' => ['nullable', 'string', 'regex:/^\d+$/', 'min:8', 'max:30'],
             'settlement_account_holder' => ['nullable', 'string', 'max:50'],
         ], [
             'seller_name.required' => '판매자 이름을 입력해 주세요.',
+            'seller_name.min' => '판매자 이름은 2자 이상 입력해 주세요.',
             'manager_name.required' => '담당자 이름을 입력해 주세요.',
+            'manager_name.min' => '담당자 이름은 2자 이상 입력해 주세요.',
+            'representative_name.min' => '대표자명은 2자 이상 입력해 주세요.',
             'login_email.required' => '이메일을 입력해 주세요.',
             'login_email.email' => '이메일에는 @와 도메인이 필요합니다.',
             'login_email.unique' => '이미 사용 중인 이메일입니다.',
-            'contact_phone.regex' => '연락처는 숫자와 - 만 입력해 주세요.',
-            'settlement_account_number.regex' => '계좌번호는 숫자와 - 만 입력해 주세요.',
+            'contact_phone.regex' => '연락처는 숫자만 입력해 주세요.',
+            'contact_phone.min' => '연락처는 8자리 이상 숫자로 입력해 주세요.',
+            'contact_phone.max' => '연락처는 20자리 이하로 입력해 주세요.',
+            'settlement_account_number.regex' => '계좌번호는 숫자만 입력해 주세요.',
+            'settlement_account_number.min' => '계좌번호는 8자리 이상 숫자로 입력해 주세요.',
+            'settlement_account_number.max' => '계좌번호는 30자리 이하로 입력해 주세요.',
         ]);
 
         $account = trim((string) ($data['settlement_account_number'] ?? ''));
@@ -119,12 +125,12 @@ class AccountController extends Controller
         }
 
         $seller->forceFill([
-            'status_id' => CatalogStatus::id('SELLER', 'WITHDRAWN', '탈퇴', 2),
+            'status' => 'WITHDRAWN',
         ])->save();
         $seller->delete();
 
         $member->forceFill([
-            'status_id' => CatalogStatus::id('SELLER_MEMBER', 'WITHDRAWN', '탈퇴', 2),
+            'status' => 'LOCKED',
         ])->save();
         $member->delete();
 
