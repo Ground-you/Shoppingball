@@ -9,6 +9,7 @@ import Withdraw from './Pages/Withdraw.vue';
 import Profile from './Pages/Profile.vue';
 import ProductDetail from './Pages/ProductDetail.vue';
 import SellerLogin from './Pages/Seller/Login.vue';
+import SellerRegister from './Pages/Seller/Register.vue';
 import SellerDashboard from './Pages/Seller/Dashboard.vue';
 import SellerProfile from './Pages/Seller/Profile.vue';
 import SellerStore from './Pages/Seller/Store.vue';
@@ -24,6 +25,7 @@ const pages = {
     Profile,
     ProductDetail,
     SellerLogin,
+    SellerRegister,
     SellerDashboard,
     SellerProfile,
     SellerStore,

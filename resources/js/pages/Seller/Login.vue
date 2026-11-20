@@ -53,6 +53,10 @@ const submit = async () => {
                 </form>
             </section>
 
+            <a href="/seller/register" class="mt-4 block rounded-2xl border border-neutral-300 bg-white py-4 text-center text-sm font-medium">
+                판매자 회원가입
+            </a>
+
             <section class="mt-4 rounded-2xl border border-neutral-200 bg-white px-6 py-5 text-sm leading-6 text-neutral-600">
                 <p class="font-bold text-neutral-800">임시 판매자 계정</p>
                 <p>이메일 seller@ccuppang.test</p>

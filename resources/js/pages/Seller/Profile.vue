@@ -31,6 +31,10 @@ const message = ref('');
 const error = ref('');
 const showWithdraw = ref(false);
 
+const digitsOnly = (event, field) => {
+    form[field] = event.target.value.replace(/\D/g, '');
+};
+
 const save = async () => {
     error.value = '';
     message.value = '';
@@ -93,7 +97,7 @@ const withdraw = async () => {
                 </label>
                 <label class="block text-sm">
                     <span class="mb-1 block text-[12px] text-neutral-500">연락처</span>
-                    <input v-model="form.contact_phone" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
+                    <input :value="form.contact_phone" type="tel" inputmode="numeric" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand" @input="digitsOnly($event, 'contact_phone')">
                 </label>
                 <label class="block text-sm">
                     <span class="mb-1 block text-[12px] text-neutral-500">사업자등록번호</span>
@@ -113,7 +117,7 @@ const withdraw = async () => {
                 </label>
                 <label class="block text-sm sm:col-span-2">
                     <span class="mb-1 block text-[12px] text-neutral-500">정산 계좌번호</span>
-                    <input v-model="form.settlement_account_number" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
+                    <input :value="form.settlement_account_number" type="text" inputmode="numeric" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand" @input="digitsOnly($event, 'settlement_account_number')">
                 </label>
             </div>
             <div class="mt-6 flex justify-end">
