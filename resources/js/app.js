@@ -17,6 +17,8 @@ import SellerStore from './Pages/Seller/Store.vue';
 import SellerProducts from './Pages/Seller/Products.vue';
 import SellerProductForm from './Pages/Seller/ProductForm.vue';
 import SellerInventory from './Pages/Seller/Inventory.vue';
+import SellerOrders from './Pages/Seller/Orders.vue';
+import SellerOrderDetail from './Pages/Seller/OrderDetail.vue';
 
 const pages = {
     Home,
@@ -34,6 +36,8 @@ const pages = {
     SellerProducts,
     SellerProductForm,
     SellerInventory,
+    SellerOrders,
+    SellerOrderDetail,
 };
 
 const root = document.getElementById('app');

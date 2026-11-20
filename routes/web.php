@@ -9,6 +9,7 @@ use App\Http\Controllers\Seller\AccountController;
 use App\Http\Controllers\Seller\AuthController as SellerAuthController;
 use App\Http\Controllers\Seller\DashboardController;
 use App\Http\Controllers\Seller\InventoryController;
+use App\Http\Controllers\Seller\OrderController as SellerOrderController;
 use App\Http\Controllers\Seller\ProductController as SellerProductController;
 use App\Http\Controllers\Seller\StoreController;
 use App\Http\Controllers\StorefrontProductController;
@@ -73,6 +74,11 @@ Route::prefix('seller')->name('seller.')->group(function () {
         Route::post('/products/{product}', [SellerProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{product}', [SellerProductController::class, 'destroy'])->name('products.destroy');
         Route::get('/products/{product}/preview', [SellerProductController::class, 'preview'])->name('products.preview');
+
+        Route::get('/orders', [SellerOrderController::class, 'index'])->name('orders.index');
+        Route::get('/orders/{order}', [SellerOrderController::class, 'show'])->name('orders.show');
+        Route::post('/orders/{order}/progress', [SellerOrderController::class, 'progress'])->name('orders.progress');
+        Route::post('/orders/{order}/claims/{claim}', [SellerOrderController::class, 'claim'])->name('orders.claims');
 
         Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory');
         Route::patch('/inventory/{sku}', [InventoryController::class, 'update'])->name('inventory.update');

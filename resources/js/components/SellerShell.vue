@@ -11,6 +11,7 @@ const items = [
     { id: 'profile', label: '판매자 정보', href: '/seller/profile' },
     { id: 'store', label: '상점 관리', href: '/seller/store' },
     { id: 'products', label: '상품 관리', href: '/seller/products' },
+    { id: 'orders', label: '주문 관리', href: '/seller/orders' },
     { id: 'inventory', label: '재고 관리', href: '/seller/inventory' },
 ];
 
