@@ -74,6 +74,74 @@ const openPostcode = async () => {
 const paymentForm = reactive(emptyPayment());
 
 const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
+const orderHeading = (value) => {
+    const [date] = String(value || '').split(' ');
+    const [year, month, day] = date.split('-');
+
+    if (!year || !month || !day) {
+        return '주문';
+    }
+
+    return `${year}. ${Number(month)}. ${Number(day)} 주문`;
+};
+const statusTone = (name) => {
+    if (name?.includes('상품도착') || name?.includes('구매확정')) {
+        return 'text-emerald-600';
+    }
+
+    if (name?.includes('취소')) {
+        return 'text-neutral-400';
+    }
+
+    return 'text-ink';
+};
+const claimForms = reactive({});
+const claimPanel = ref(null);
+const claimError = ref('');
+
+props.orders.forEach((order) => {
+    claimForms[order.id] = {
+        reason: '',
+        order_item_id: order.items[0]?.id || '',
+        exchange_product_sku_id: order.items[0]?.exchangeOptions?.[0]?.id || '',
+        quantity: order.items[0]?.quantity || 1,
+    };
+});
+
+const openClaim = (order, type) => {
+    claimError.value = '';
+    claimPanel.value = claimPanel.value?.id === order.id && claimPanel.value?.type === type
+        ? null
+        : { id: order.id, type };
+};
+
+const trackOrder = (order) => {
+    if (order.tracking?.url) {
+        window.open(order.tracking.url, '_blank', 'noopener');
+    }
+};
+
+const sendClaim = async (order, type) => {
+    claimError.value = '';
+    const form = claimForms[order.id];
+
+    try {
+        const url = type === 'cancel' ? `/orders/${order.id}/cancel` : `/orders/${order.id}/exchange`;
+        const payload = type === 'cancel'
+            ? { reason_detail: form.reason }
+            : {
+                order_item_id: form.order_item_id,
+                exchange_product_sku_id: form.exchange_product_sku_id,
+                quantity: form.quantity,
+                reason_detail: form.reason,
+            };
+        const { data } = await axios.post(url, payload);
+        window.location.href = data.redirect;
+    } catch (error) {
+        const errors = error.response?.data?.errors || {};
+        claimError.value = Object.values(errors)[0]?.[0] || error.response?.data?.message || '요청에 실패했습니다.';
+    }
+};
 
 const closePopup = () => {
     popup.value = null;
@@ -240,17 +308,46 @@ const firstError = (error) => {
             </section>
 
             <section class="rounded-2xl bg-white py-5 pr-6 pl-[calc(1.5rem+7px)]">
-                <h2 class="text-lg font-bold">구매한 상품</h2>
-                <p v-if="orders.length === 0" class="py-8 text-center text-sm text-neutral-500">아직 구매한 상품이 없습니다.</p>
-                <article v-for="order in orders" :key="order.id" class="mt-4 border-t border-neutral-300 pt-4">
-                    <div class="flex items-center justify-between text-sm">
-                        <span class="font-medium">{{ order.orderNumber }}</span>
-                        <span class="text-neutral-500">{{ order.orderedAt }}</span>
+                <h2 class="text-lg font-bold">주문내역</h2>
+                <p v-if="orders.length === 0" class="py-8 text-center text-sm text-neutral-500">아직 주문 내역이 없습니다.</p>
+                <article v-for="order in orders" :key="order.id" class="mt-4 rounded-2xl border border-neutral-200 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-[22px] font-extrabold leading-none" :class="statusTone(order.statusName)">{{ order.statusName }}</p>
+                        <div class="text-right leading-tight">
+                            <p class="text-sm font-medium text-brand">{{ order.orderNumber }}</p>
+                            <p class="mt-0.5 text-sm text-neutral-500">{{ orderHeading(order.orderedAt) }}</p>
+                        </div>
                     </div>
-                    <p v-for="item in order.items" :key="item.name + item.option" class="mt-2 text-sm">
-                        {{ item.name }} / {{ item.option }} · {{ item.quantity }}개 · {{ won(item.amount) }}
-                    </p>
-                    <p class="mt-2 text-sm font-bold">결제 {{ won(order.finalPaymentAmount) }}</p>
+                    <div class="mt-4 flex flex-col gap-4 border-t border-neutral-100 pt-4 sm:flex-row sm:items-center">
+                        <div class="min-w-0 flex-1">
+                            <component :is="item.productId ? 'a' : 'div'" v-for="item in order.items" :key="item.id" :href="item.productId ? `/products/${item.productId}` : null" class="mt-4 flex items-center gap-4 first:mt-0">
+                                <img v-if="item.image" :src="item.image" alt="" class="h-28 w-28 shrink-0 rounded-xl object-cover">
+                                <div v-else class="h-28 w-28 shrink-0 rounded-xl bg-neutral-100"></div>
+                                <div class="min-w-0">
+                                    <p class="line-clamp-2 text-base font-semibold">{{ item.name }}</p>
+                                    <p class="mt-1 text-sm text-neutral-500">{{ item.option }}</p>
+                                    <p class="mt-2 text-sm font-medium">{{ won(item.amount) }} · {{ item.quantity }}개</p>
+                                </div>
+                            </component>
+                        </div>
+                        <div class="flex w-full shrink-0 flex-col gap-2 sm:w-36">
+                            <button type="button" class="h-10 rounded-lg border border-brand text-sm font-medium text-brand" @click="trackOrder(order)">배송 조회</button>
+                            <button v-if="order.canCancel" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openClaim(order, 'cancel')">취소 요청</button>
+                            <button v-if="order.canExchange" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openClaim(order, 'exchange')">교환 요청</button>
+                        </div>
+                    </div>
+                    <div v-if="claimPanel?.id === order.id" class="mt-4 space-y-2 border-t border-neutral-100 pt-4">
+                        <input v-model="claimForms[order.id].reason" type="text" placeholder="사유" class="h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-brand">
+                        <select v-if="claimPanel.type === 'exchange'" v-model="claimForms[order.id].exchange_product_sku_id" class="h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm">
+                            <option v-for="option in order.items[0]?.exchangeOptions || []" :key="option.id" :value="option.id">
+                                {{ option.name }} · 재고 {{ option.stock }}
+                            </option>
+                        </select>
+                        <button type="button" class="h-10 rounded-lg bg-brand px-4 text-sm font-bold text-white" @click="sendClaim(order, claimPanel.type)">
+                            {{ claimPanel.type === 'cancel' ? '취소 요청하기' : '교환 요청하기' }}
+                        </button>
+                        <p v-if="claimError" class="text-xs text-brand">{{ claimError }}</p>
+                    </div>
                 </article>
             </section>
 

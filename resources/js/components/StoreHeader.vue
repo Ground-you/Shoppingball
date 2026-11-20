@@ -20,26 +20,24 @@ const logout = async () => {
 
 <template>
     <header class="sticky top-0 z-40 border-b border-neutral-200 bg-white">
-        <div class="mx-auto flex h-[78px] max-w-[1160px] items-center gap-8 px-5">
-            <a href="/" class="shrink-0 text-[30px] leading-none font-black tracking-tight text-brand">ccuppang</a>
+        <div class="mx-auto flex max-w-[1160px] flex-wrap items-center gap-x-4 gap-y-3 px-5 py-3 sm:h-[78px] sm:flex-nowrap sm:gap-8 sm:py-0">
+            <a href="/" class="shrink-0 text-[26px] leading-none font-black tracking-tight text-brand sm:text-[30px]">ccuppang</a>
 
-            <form class="flex h-12 min-w-0 flex-1 overflow-hidden rounded-full border-2 border-brand" @submit.prevent>
+            <form class="order-3 flex h-11 w-full min-w-0 overflow-hidden rounded-full border-2 border-brand sm:order-none sm:h-12 sm:w-auto sm:flex-1" @submit.prevent>
                 <input
                     type="search"
                     placeholder="찾고 싶은 상품을 검색해보세요"
                     class="min-w-0 flex-1 px-4 text-sm outline-none"
                 >
-                <button type="submit" class="bg-brand px-7 text-sm font-bold text-white">검색</button>
+                <button type="submit" class="bg-brand px-4 text-sm font-bold text-white sm:px-7">검색</button>
             </form>
 
-            <a href="/seller" class="hidden shrink-0 text-[12px] font-bold text-brand lg:inline">판매자센터</a>
-
-            <div class="hidden items-center gap-5 text-[12px] text-neutral-600 lg:flex">
+            <div class="ml-auto flex shrink-0 items-center gap-3 text-[12px] text-neutral-600 sm:gap-5">
                 <a v-if="!buyer" href="/login" class="flex flex-col items-center gap-1">
                     <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.2" /><path d="M5 19c1.4-3 3.8-4.5 7-4.5s5.6 1.5 7 4.5" /></svg>
                     로그인
                 </a>
-                <div v-else class="flex items-center gap-4">
+                <div v-else class="flex items-center gap-3 sm:gap-4">
                     <a href="/mypage" class="max-w-24 truncate font-medium text-neutral-800">{{ buyer.nickname || buyer.name }}</a>
                     <button type="button" class="text-neutral-500" @click="logout">로그아웃</button>
                 </div>

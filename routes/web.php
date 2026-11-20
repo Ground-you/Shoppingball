@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BuyerOrderController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProfileController;
@@ -38,6 +39,8 @@ Route::middleware('auth:buyer')->group(function () {
 
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
+    Route::post('/orders/{order}/cancel', [BuyerOrderController::class, 'cancel'])->name('orders.cancel');
+    Route::post('/orders/{order}/exchange', [BuyerOrderController::class, 'exchange'])->name('orders.exchange');
 });
 
 Route::get('/products/{product}', [StorefrontProductController::class, 'show'])->name('products.show');
