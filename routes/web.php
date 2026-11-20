@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Seller\AccountController;
@@ -34,6 +35,9 @@ Route::middleware('auth:buyer')->group(function () {
     Route::patch('/mypage/payment-methods/{paymentMethod}', [ProfileController::class, 'updatePaymentMethod'])->name('mypage.payments.update');
     Route::delete('/mypage/payment-methods/{paymentMethod}', [ProfileController::class, 'destroyPaymentMethod'])->name('mypage.payments.destroy');
     Route::post('/withdraw', [AuthController::class, 'withdraw'])->name('withdraw.store');
+
+    Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout');
+    Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
 });
 
 Route::get('/products/{product}', [StorefrontProductController::class, 'show'])->name('products.show');
