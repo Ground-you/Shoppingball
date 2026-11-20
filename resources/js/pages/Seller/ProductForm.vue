@@ -190,8 +190,8 @@ const submit = async () => {
                 <span class="mb-1 block text-[12px] text-neutral-500">판매 상태</span>
                 <select v-model="form.sale_status" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand sm:max-w-xs">
                     <option value="ON_SALE">판매중</option>
+                    <option value="SOLD_OUT">품절</option>
                     <option value="STOPPED">판매중지</option>
-                    <option value="DRAFT">임시저장</option>
                 </select>
             </label>
 
@@ -200,14 +200,28 @@ const submit = async () => {
                     <h2 class="text-sm font-bold">옵션 · 가격 · 재고</h2>
                     <button type="button" class="text-sm font-bold text-brand" @click="addSku">옵션 추가</button>
                 </div>
-                <div v-for="(sku, index) in skus" :key="sku.id || index" class="mt-3 grid items-center gap-2 rounded-xl bg-neutral-50 p-3 sm:grid-cols-[minmax(0,1.4fr)_120px_100px_70px_52px]">
-                    <input v-model="sku.option_name" placeholder="옵션 이름. 예: 화이트 / L" class="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
-                    <input v-model="sku.additional_price" type="number" min="0" placeholder="추가금액" class="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
-                    <input v-model="sku.stock_quantity" type="number" min="0" placeholder="재고" class="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
-                    <label class="flex items-center gap-1 text-[12px] text-neutral-600">
-                        <input v-model="sku.sold_out" type="checkbox"> 품절
-                    </label>
-                    <button type="button" class="text-sm text-neutral-500" @click="removeSku(index)">삭제</button>
+                <p class="mt-1 text-[12px] leading-5 text-neutral-500">색상이나 사이즈가 없으면 옵션 이름은 기본으로 두세요. 추가 금액은 그 옵션을 고르면 판매가에 더해지는 금액이고, 없으면 0입니다. 재고는 지금 판매할 수 있는 개수입니다.</p>
+                <div v-for="(sku, index) in skus" :key="sku.id || index" class="mt-3 rounded-xl bg-neutral-50 p-3">
+                    <div class="grid gap-3 sm:grid-cols-[minmax(0,1.6fr)_140px_110px] sm:items-end">
+                        <label class="block text-sm">
+                            <span class="mb-1 block text-[12px] font-medium text-neutral-500">옵션 이름</span>
+                            <input v-model="sku.option_name" placeholder="예: 화이트 / L" class="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
+                        </label>
+                        <label class="block text-sm">
+                            <span class="mb-1 block text-[12px] font-medium text-neutral-500">추가 금액 (원)</span>
+                            <input v-model="sku.additional_price" type="number" min="0" class="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
+                        </label>
+                        <label class="block text-sm">
+                            <span class="mb-1 block text-[12px] font-medium text-neutral-500">재고 (개)</span>
+                            <input v-model="sku.stock_quantity" type="number" min="0" class="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand">
+                        </label>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between">
+                        <label class="flex items-center gap-2 text-sm text-neutral-600">
+                            <input v-model="sku.sold_out" type="checkbox"> 이 옵션 품절
+                        </label>
+                        <button type="button" class="text-sm text-neutral-500" @click="removeSku(index)">이 옵션 삭제</button>
+                    </div>
                 </div>
             </div>
 

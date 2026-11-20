@@ -7,7 +7,7 @@
         <title>ccuppang</title>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
-        <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+        <script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
     </head>
     <body>
         <div id="app" data-page='@json($page)'></div>
