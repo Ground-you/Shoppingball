@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductSku;
+use App\Support\ProductHtml;
 use App\Support\ProductView;
 use App\Support\StatusLabel;
 use App\Support\PublicUpload;
@@ -84,6 +85,34 @@ class ProductController extends Controller
         ]);
     }
 
+    public function autosave(Request $request)
+    {
+        return $this->autosaveResponse($this->persist($request, null, true));
+    }
+
+    public function autosaveExisting(Request $request, Product $product)
+    {
+        $product = $this->own($product);
+        abort_unless($product->sale_status === 'DRAFT', 422);
+
+        return $this->autosaveResponse($this->persist($request, $product, true));
+    }
+
+    public function detailImage(Request $request)
+    {
+        $data = $request->validate([
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+        ], [
+            'image.required' => '상세 설명에 넣을 이미지를 선택해 주세요.',
+            'image.image' => '상세 설명에는 이미지 파일만 넣을 수 있습니다.',
+            'image.max' => '이미지는 5MB 이하만 올릴 수 있습니다.',
+        ]);
+
+        return response()->json([
+            'url' => PublicUpload::store($data['image'], 'products'),
+        ]);
+    }
+
     public function destroy(Product $product)
     {
         $this->own($product)->delete();
@@ -104,16 +133,24 @@ class ProductController extends Controller
 
         $store = SellerContext::store();
 
-        Product::query()
+        $selected = Product::query()
             ->where('store_id', $store->id)
-            ->whereIn('id', $data['ids'])
+            ->whereIn('id', $data['ids']);
+        $drafts = (clone $selected)->where('sale_status', 'DRAFT')->count();
+
+        (clone $selected)
+            ->where('sale_status', '!=', 'DRAFT')
             ->update([
                 'sale_status' => $data['sale_status'],
                 'approval_status' => 'APPROVED',
                 'rejected_reason' => null,
             ]);
 
-        return response()->json(['message' => '선택한 상품의 판매 상태를 변경했습니다.']);
+        return response()->json([
+            'message' => $drafts
+                ? '임시저장 상품은 상품 화면에서 저장해야 공개됩니다. 그 외 선택 상품의 상태를 변경했습니다.'
+                : '선택한 상품의 판매 상태를 변경했습니다.',
+        ]);
     }
 
     public function preview(Product $product)
@@ -146,16 +183,17 @@ class ProductController extends Controller
         ]);
     }
 
-    private function persist(Request $request, ?Product $product): Product
+    private function persist(Request $request, ?Product $product, bool $draft = false): Product
     {
         $this->decodeSkus($request);
         $creating = $product === null;
-        $data = $this->validateProduct($request, $creating);
+        $data = $draft ? $this->validateDraft($request) : $this->validateProduct($request);
+        $prices = $this->listingPrices($data['skus']);
         $createdUrls = [];
         $removedUrls = [];
 
         try {
-            $saved = DB::transaction(function () use ($request, $product, $data, $creating, &$createdUrls, &$removedUrls) {
+            $saved = DB::transaction(function () use ($request, $product, $data, $creating, $draft, $prices, &$createdUrls, &$removedUrls) {
                 $store = SellerContext::store();
                 $brandId = $this->brandId($data['brand_name'] ?? null);
                 $payload = [
@@ -163,10 +201,10 @@ class ProductController extends Controller
                     'category_id' => $data['category_id'] ?? null,
                     'brand_id' => $brandId,
                     'product_name' => $data['product_name'],
-                    'description' => $data['description'] ?? null,
-                    'regular_price' => $data['regular_price'],
-                    'sale_price' => $data['sale_price'],
-                    'sale_status' => $data['sale_status'],
+                    'description' => ProductHtml::clean($data['description'] ?? null),
+                    'regular_price' => $prices['regular'],
+                    'sale_price' => $prices['sale'],
+                    'sale_status' => $draft ? 'DRAFT' : $data['sale_status'],
                     'approval_status' => 'APPROVED',
                     'rejected_reason' => null,
                 ];
@@ -178,7 +216,7 @@ class ProductController extends Controller
                 }
 
                 $this->syncSkus($product, $data['skus']);
-                $this->syncImages($request, $product, $creating, $createdUrls, $removedUrls);
+                $this->syncImages($request, $product, $creating, $createdUrls, $removedUrls, ! $draft);
 
                 return $product;
             });
@@ -213,42 +251,100 @@ class ProductController extends Controller
         $request->merge(['skus' => $decoded]);
     }
 
-    private function validateProduct(Request $request, bool $creating): array
+    private function validateProduct(Request $request): array
     {
         $request->merge([
             'category_id' => $request->filled('category_id') ? $request->input('category_id') : null,
             'brand_name' => trim((string) $request->input('brand_name', '')) ?: null,
-            'description' => trim((string) $request->input('description', '')) ?: null,
+            'description' => $request->input('description'),
         ]);
 
-        return $request->validate([
+        $data = $request->validate([
             'product_name' => ['required', 'string', 'max:200'],
-            'description' => ['nullable', 'string', 'max:5000'],
+            'description' => ['nullable', 'string', 'max:200000'],
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')],
             'brand_name' => ['nullable', 'string', 'max:100'],
-            'regular_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
-            'sale_price' => ['required', 'numeric', 'min:0', 'lte:regular_price'],
-            'sale_status' => ['required', Rule::in(['ON_SALE', 'SOLD_OUT', 'STOPPED'])],
+            'sale_status' => ['required', Rule::in(['ON_SALE', 'SOLD_OUT', 'STOPPED', 'DRAFT'])],
             'skus' => ['required', 'array', 'min:1', 'max:30'],
             'skus.*.id' => ['nullable', 'integer'],
             'skus.*.option_name' => ['required', 'string', 'max:200'],
-            'skus.*.additional_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
+            'skus.*.regular_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
+            'skus.*.sale_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
             'skus.*.stock_quantity' => ['required', 'integer', 'min:0', 'max:1000000'],
             'skus.*.sold_out' => ['nullable', 'boolean'],
-            'images' => [$creating ? 'required' : 'nullable', 'array', 'max:8'],
+            'images' => ['nullable', 'array', 'max:8'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
             'keep_image_ids' => ['nullable', 'string', 'max:500'],
             'main_image' => ['nullable', 'string', 'max:40'],
         ], [
             'product_name.required' => '상품명을 입력해 주세요.',
-            'regular_price.required' => '정상가를 입력해 주세요.',
-            'sale_price.required' => '판매가를 입력해 주세요.',
-            'sale_price.lte' => '판매가는 정상가보다 클 수 없습니다.',
             'skus.required' => '옵션을 하나 이상 등록해 주세요.',
             'skus.*.option_name.required' => '옵션 이름을 입력해 주세요.',
-            'images.required' => '상품 이미지를 1장 이상 등록해 주세요.',
+            'skus.*.regular_price.required' => '옵션 정상가를 입력해 주세요.',
+            'skus.*.sale_price.required' => '옵션 판매가를 입력해 주세요.',
             'images.*.image' => '상품 이미지는 이미지 파일만 올릴 수 있습니다.',
             'images.*.max' => '이미지는 5MB 이하만 올릴 수 있습니다.',
+        ]);
+
+        foreach ($data['skus'] as $index => $row) {
+            if ((float) $row['sale_price'] > (float) $row['regular_price']) {
+                throw ValidationException::withMessages([
+                    "skus.$index.sale_price" => '옵션 판매가는 그 옵션의 정상가보다 클 수 없습니다.',
+                ]);
+            }
+        }
+
+        return $data;
+    }
+
+    private function validateDraft(Request $request): array
+    {
+        $skus = $request->input('skus');
+        if (! is_array($skus) || $skus === []) {
+            $skus = [[
+                'option_name' => '기본',
+                'regular_price' => 0,
+                'sale_price' => 0,
+                'stock_quantity' => 0,
+                'sold_out' => false,
+            ]];
+        }
+
+        foreach ($skus as $index => $row) {
+            $skus[$index]['option_name'] = trim((string) ($row['option_name'] ?? '')) ?: '기본';
+            $skus[$index]['regular_price'] = is_numeric($row['regular_price'] ?? null) ? $row['regular_price'] : 0;
+            $skus[$index]['sale_price'] = is_numeric($row['sale_price'] ?? null) ? $row['sale_price'] : 0;
+            $skus[$index]['stock_quantity'] = is_numeric($row['stock_quantity'] ?? null) ? (int) $row['stock_quantity'] : 0;
+            if ((float) $skus[$index]['sale_price'] > (float) $skus[$index]['regular_price']) {
+                $skus[$index]['sale_price'] = $skus[$index]['regular_price'];
+            }
+        }
+
+        $request->merge([
+            'product_name' => trim((string) $request->input('product_name', '')) ?: '제목 없음',
+            'category_id' => $request->filled('category_id') ? $request->input('category_id') : null,
+            'brand_name' => trim((string) $request->input('brand_name', '')) ?: null,
+            'sale_status' => 'DRAFT',
+            'skus' => $skus,
+        ]);
+
+        return $request->validate([
+            'product_name' => ['required', 'string', 'max:200'],
+            'description' => ['nullable', 'string', 'max:200000'],
+            'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')],
+            'brand_name' => ['nullable', 'string', 'max:100'],
+            'sale_status' => ['required', Rule::in(['DRAFT'])],
+            'skus' => ['required', 'array', 'min:1', 'max:30'],
+            'skus.*.id' => ['nullable', 'integer'],
+            'skus.*.option_name' => ['required', 'string', 'max:200'],
+            'skus.*.regular_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
+            'skus.*.sale_price' => ['required', 'numeric', 'min:0', 'max:99999999'],
+            'skus.*.stock_quantity' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'skus.*.sold_out' => ['nullable', 'boolean'],
+            'images' => ['nullable', 'array', 'max:8'],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+            'keep_image_ids' => ['nullable', 'string', 'max:500'],
+            'main_image' => ['nullable', 'string', 'max:40'],
         ]);
     }
 
@@ -259,7 +355,9 @@ class ProductController extends Controller
         foreach (array_values($rows) as $index => $row) {
             $payload = [
                 'option_name' => $row['option_name'],
-                'additional_price' => $row['additional_price'],
+                'additional_price' => 0,
+                'regular_price' => $row['regular_price'],
+                'sale_price' => $row['sale_price'],
                 'stock_quantity' => $row['stock_quantity'],
                 'status' => ! empty($row['sold_out']) ? 'SOLD_OUT' : 'ON_SALE',
                 'sort_order' => $index,
@@ -286,7 +384,7 @@ class ProductController extends Controller
             ->delete();
     }
 
-    private function syncImages(Request $request, Product $product, bool $creating, array &$createdUrls, array &$removedUrls): void
+    private function syncImages(Request $request, Product $product, bool $creating, array &$createdUrls, array &$removedUrls, bool $requireImages = true): void
     {
         $keepIds = collect(explode(',', (string) $request->input('keep_image_ids', '')))
             ->filter(fn ($id) => $id !== '')
@@ -298,7 +396,7 @@ class ProductController extends Controller
             $newFiles = [$newFiles];
         }
 
-        if ($keepIds->count() + count($newFiles) < 1) {
+        if ($requireImages && $keepIds->count() + count($newFiles) < 1) {
             throw ValidationException::withMessages([
                 'images' => '상품 이미지를 1장 이상 등록해 주세요.',
             ]);
@@ -372,6 +470,50 @@ class ProductController extends Controller
         return $brand->id;
     }
 
+    private function listingPrices(array $rows): array
+    {
+        $cheapest = collect($rows)->sortBy(fn (array $row) => (float) $row['sale_price'])->first();
+
+        return [
+            'regular' => $cheapest['regular_price'] ?? 0,
+            'sale' => $cheapest['sale_price'] ?? 0,
+        ];
+    }
+
+    private function autosaveResponse(Product $product)
+    {
+        $product->load(['images', 'skus']);
+        $main = $product->images->firstWhere('is_main', true) ?? $product->images->first();
+
+        return response()->json([
+            'id' => $product->id,
+            'savedAt' => now()->format('H:i'),
+            'mainImageId' => $main?->id,
+            'skus' => $product->skus->sortBy('sort_order')->values()->map(fn (ProductSku $sku) => [
+                'id' => $sku->id,
+            ])->all(),
+            'images' => $product->images->map(fn (ProductImage $image) => [
+                'id' => $image->id,
+                'url' => $image->image_url,
+                'isMain' => (bool) $image->is_main,
+            ])->values()->all(),
+        ]);
+    }
+
+    private function storeCard(): array
+    {
+        $store = SellerContext::store();
+        $policy = $store->policies()->orderByDesc('version_no')->first();
+
+        return [
+            'name' => $store->store_name,
+            'logo' => $store->logo_url,
+            'banner' => $store->banner_image_url,
+            'shippingNotice' => $policy?->shipping_policy_notice,
+            'exchangeNotice' => $policy?->exchange_return_policy_notice,
+        ];
+    }
+
     private function own(Product $product): Product
     {
         abort_unless($product->store_id === SellerContext::store()->id, 404);
@@ -393,6 +535,7 @@ class ProductController extends Controller
                 ])
                 ->values()
                 ->all(),
+            'store' => $this->storeCard(),
             'product' => $product ? [
                 'id' => $product->id,
                 'product_name' => $product->product_name,
@@ -410,7 +553,8 @@ class ProductController extends Controller
                 'skus' => $product->skus->map(fn (ProductSku $sku) => [
                     'id' => $sku->id,
                     'option_name' => $sku->option_name,
-                    'additional_price' => ProductView::money($sku->additional_price),
+                    'regular_price' => ProductView::skuRegular($product, $sku),
+                    'sale_price' => ProductView::skuSale($product, $sku),
                     'stock_quantity' => $sku->stock_quantity,
                     'sold_out' => $sku->status === 'SOLD_OUT',
                 ])->values()->all(),

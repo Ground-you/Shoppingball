@@ -54,7 +54,7 @@ const apply = async (row, action) => {
                             </td>
                             <td class="py-3">
                                 {{ row.optionName }}
-                                <span v-if="row.additionalPrice" class="text-neutral-400">+{{ row.additionalPrice.toLocaleString('ko-KR') }}원</span>
+                                <span v-if="row.salePrice" class="text-neutral-400">{{ row.salePrice.toLocaleString('ko-KR') }}원</span>
                             </td>
                             <td class="py-3">
                                 <span :class="row.low ? 'font-bold text-brand' : ''">{{ row.stock }}</span>

@@ -15,6 +15,8 @@ class ProductSku extends Model
         'sku_code',
         'option_name',
         'additional_price',
+        'regular_price',
+        'sale_price',
         'stock_quantity',
         'status',
         'sort_order',
@@ -24,6 +26,8 @@ class ProductSku extends Model
     {
         return [
             'additional_price' => 'decimal:2',
+            'regular_price' => 'decimal:2',
+            'sale_price' => 'decimal:2',
         ];
     }
 

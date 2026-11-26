@@ -29,13 +29,9 @@ const badgeClass = (badge) => {
                 {{ product.badge }}
             </span>
         </div>
-        <p v-if="product.example" class="mt-2 text-[11px] font-medium" :class="dark ? 'text-amber-200' : 'text-neutral-400'">예시 상품</p>
-        <h3 class="line-clamp-2 text-[13px] leading-snug" :class="[dark ? 'text-white' : 'text-neutral-800', product.example ? 'mt-1' : 'mt-2']">
+        <h3 class="mt-2 line-clamp-2 text-[13px] leading-snug" :class="dark ? 'text-white' : 'text-neutral-800'">
             {{ product.name }}
         </h3>
-        <p v-if="product.description" class="mt-1 line-clamp-2 text-[11px] leading-snug" :class="dark ? 'text-white/60' : 'text-neutral-500'">
-            {{ product.description }}
-        </p>
         <p class="mt-1 text-[16px] font-bold" :class="dark ? 'text-white' : 'text-neutral-950'">
             <span v-if="product.discount > 0" class="mr-1 text-brand">{{ product.discount }}%</span>{{ won(product.price) }}
         </p>

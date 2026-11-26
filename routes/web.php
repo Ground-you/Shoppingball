@@ -69,7 +69,10 @@ Route::prefix('seller')->name('seller.')->group(function () {
         Route::get('/products', [SellerProductController::class, 'index'])->name('products.index');
         Route::get('/products/create', [SellerProductController::class, 'create'])->name('products.create');
         Route::post('/products', [SellerProductController::class, 'store'])->name('products.store');
+        Route::post('/products/autosave', [SellerProductController::class, 'autosave'])->name('products.autosave');
+        Route::post('/products/detail-images', [SellerProductController::class, 'detailImage'])->name('products.detail-images');
         Route::post('/products/bulk', [SellerProductController::class, 'bulk'])->name('products.bulk');
+        Route::post('/products/{product}/autosave', [SellerProductController::class, 'autosaveExisting'])->name('products.autosave.existing');
         Route::get('/products/{product}/edit', [SellerProductController::class, 'edit'])->name('products.edit');
         Route::post('/products/{product}', [SellerProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{product}', [SellerProductController::class, 'destroy'])->name('products.destroy');
