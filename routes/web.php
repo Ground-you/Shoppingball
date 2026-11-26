@@ -42,6 +42,8 @@ Route::middleware('auth:buyer')->group(function () {
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
     Route::post('/orders/{order}/cancel', [BuyerOrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/exchange', [BuyerOrderController::class, 'exchange'])->name('orders.exchange');
+    Route::post('/orders/{order}/return', [BuyerOrderController::class, 'returnOrder'])->name('orders.return');
+    Route::delete('/orders/{order}', [BuyerOrderController::class, 'destroy'])->name('orders.destroy');
 });
 
 Route::get('/products/{product}', [StorefrontProductController::class, 'show'])->name('products.show');

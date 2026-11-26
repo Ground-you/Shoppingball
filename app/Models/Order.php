@@ -23,6 +23,7 @@ class Order extends Model
         'final_payment_amount',
         'ordered_at',
         'canceled_at',
+        'buyer_hidden_at',
     ];
 
     protected function casts(): array
@@ -33,6 +34,7 @@ class Order extends Model
             'final_payment_amount' => 'decimal:2',
             'ordered_at' => 'datetime',
             'canceled_at' => 'datetime',
+            'buyer_hidden_at' => 'datetime',
         ];
     }
 

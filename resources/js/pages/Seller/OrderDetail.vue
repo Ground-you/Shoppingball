@@ -92,20 +92,24 @@ const claim = async (item, decision) => {
 
         <section class="mt-4 rounded-2xl border border-neutral-200 bg-white p-6">
             <h2 class="font-bold">주문 처리</h2>
-            <label v-if="order.actions.ship" class="mt-4 block text-sm">
+            <label v-if="order.actions.ready || order.actions.ship" class="mt-4 block text-sm">
                 <span class="mb-1 block font-medium">택배사</span>
                 <select v-model="carrierId" class="h-11 w-full rounded-lg border border-neutral-300 px-3 outline-none focus:border-brand">
                     <option v-for="carrier in carriers" :key="carrier.id" :value="carrier.id">{{ carrier.name }}</option>
                 </select>
             </label>
             <div class="mt-4 flex flex-wrap gap-2">
+                <button v-if="order.actions.approve" type="button" class="rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" :disabled="submitting" @click="progress('approve')">주문 승인</button>
+                <button v-if="order.actions.prepare" type="button" class="rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" :disabled="submitting" @click="progress('prepare')">상품 준비</button>
+                <button v-if="order.actions.ready" type="button" class="rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" :disabled="submitting" @click="progress('ready')">배송 준비</button>
                 <button v-if="order.actions.ship" type="button" class="rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" :disabled="submitting" @click="progress('ship')">상품발송</button>
                 <button v-if="order.actions.deliver" type="button" class="rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" :disabled="submitting" @click="progress('deliver')">상품도착</button>
             </div>
+            <p v-if="order.claims.some((item) => item.canApprove)" class="mt-3 text-sm text-neutral-500">취소·환불·교환 요청을 먼저 수락하거나 거절해 주세요.</p>
         </section>
 
         <section v-if="order.claims.length" class="mt-4 rounded-2xl border border-neutral-200 bg-white p-6">
-            <h2 class="font-bold">취소·교환</h2>
+            <h2 class="font-bold">취소·교환·환불</h2>
             <article v-for="item in order.claims" :key="item.id" class="mt-4 border-t border-neutral-200 pt-4 text-sm">
                 <p class="font-medium">{{ item.typeName }} · {{ item.status }}</p>
                 <p class="mt-1 text-neutral-600">{{ item.productName }} / {{ item.optionName }} · {{ item.quantity }}개</p>
@@ -118,8 +122,8 @@ const claim = async (item, decision) => {
                 <div v-if="item.canApprove || item.canReject || item.canComplete" class="mt-3 space-y-2">
                     <input v-if="item.canReject" v-model="rejectReasons[item.id]" type="text" placeholder="거절 사유" class="h-11 w-full rounded-lg border border-neutral-300 px-3 outline-none focus:border-brand">
                     <div class="flex flex-wrap gap-2">
-                        <button v-if="item.canApprove" type="button" class="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white" :disabled="submitting" @click="claim(item, 'approve')">{{ item.typeName }} 승인</button>
-                        <button v-if="item.canReject" type="button" class="rounded-lg border border-neutral-300 px-4 py-2 text-sm" :disabled="submitting" @click="claim(item, 'reject')">{{ item.typeName }} 거절</button>
+                        <button v-if="item.canApprove" type="button" class="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white" :disabled="submitting" @click="claim(item, 'approve')">{{ item.type === 'RETURN' ? '환불 수락' : item.typeName + ' 수락' }}</button>
+                        <button v-if="item.canReject" type="button" class="rounded-lg border border-neutral-300 px-4 py-2 text-sm" :disabled="submitting" @click="claim(item, 'reject')">{{ item.type === 'RETURN' ? '환불 거절' : item.typeName + ' 거절' }}</button>
                         <button v-if="item.canComplete" type="button" class="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white" :disabled="submitting" @click="claim(item, 'complete')">교환 처리 완료</button>
                     </div>
                 </div>

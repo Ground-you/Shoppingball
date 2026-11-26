@@ -35,14 +35,19 @@ class BuyerOrderController extends Controller
         $buyer = Auth::guard('buyer')->user();
         abort_unless($order->buyer_id === $buyer->id, 404);
 
+        $request->merge([
+            'reason_detail' => trim((string) $request->input('reason_detail')),
+        ]);
+
         $data = $request->validate([
             'order_item_id' => ['required', 'integer'],
             'exchange_product_sku_id' => ['required', 'integer'],
             'quantity' => ['required', 'integer', 'min:1'],
-            'reason_detail' => ['required', 'string', 'max:500'],
+            'reason_detail' => ['required', 'string', 'min:5', 'max:500'],
         ], [
             'exchange_product_sku_id.required' => '교환할 옵션을 선택해 주세요.',
             'reason_detail.required' => '교환 사유를 입력해 주세요.',
+            'reason_detail.min' => '교환 사유는 5자 이상 입력해 주세요.',
         ]);
 
         $this->orders->requestExchange(
@@ -53,6 +58,39 @@ class BuyerOrderController extends Controller
             (int) $data['quantity'],
             $data['reason_detail'],
         );
+
+        return response()->json(['redirect' => route('mypage')]);
+    }
+
+    public function returnOrder(Request $request, Order $order)
+    {
+        /** @var Buyer $buyer */
+        $buyer = Auth::guard('buyer')->user();
+        abort_unless($order->buyer_id === $buyer->id, 404);
+
+        $request->merge([
+            'reason_detail' => trim((string) $request->input('reason_detail')),
+        ]);
+
+        $data = $request->validate([
+            'reason_detail' => ['required', 'string', 'min:5', 'max:500'],
+        ], [
+            'reason_detail.required' => '환불 사유를 입력해 주세요.',
+            'reason_detail.min' => '환불 사유는 5자 이상 입력해 주세요.',
+        ]);
+
+        $this->orders->requestReturn($buyer, $order, $data['reason_detail']);
+
+        return response()->json(['redirect' => route('mypage')]);
+    }
+
+    public function destroy(Order $order)
+    {
+        /** @var Buyer $buyer */
+        $buyer = Auth::guard('buyer')->user();
+        abort_unless($order->buyer_id === $buyer->id, 404);
+
+        $this->orders->hideFromBuyer($buyer, $order);
 
         return response()->json(['redirect' => route('mypage')]);
     }
