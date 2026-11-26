@@ -2,23 +2,23 @@ import './bootstrap';
 import '../css/app.css';
 
 import { createApp } from 'vue';
-import Home from './Pages/Home.vue';
-import Login from './Pages/Login.vue';
-import Register from './Pages/Register.vue';
-import Withdraw from './Pages/Withdraw.vue';
-import Profile from './Pages/Profile.vue';
-import ProductDetail from './Pages/ProductDetail.vue';
-import Checkout from './Pages/Checkout.vue';
-import SellerLogin from './Pages/Seller/Login.vue';
-import SellerRegister from './Pages/Seller/Register.vue';
-import SellerDashboard from './Pages/Seller/Dashboard.vue';
-import SellerProfile from './Pages/Seller/Profile.vue';
-import SellerStore from './Pages/Seller/Store.vue';
-import SellerProducts from './Pages/Seller/Products.vue';
-import SellerProductForm from './Pages/Seller/ProductForm.vue';
-import SellerInventory from './Pages/Seller/Inventory.vue';
-import SellerOrders from './Pages/Seller/Orders.vue';
-import SellerOrderDetail from './Pages/Seller/OrderDetail.vue';
+import Home from './pages/Home.vue';
+import Login from './pages/Login.vue';
+import Register from './pages/Register.vue';
+import Withdraw from './pages/Withdraw.vue';
+import Profile from './pages/Profile.vue';
+import ProductDetail from './pages/ProductDetail.vue';
+import Checkout from './pages/Checkout.vue';
+import SellerLogin from './pages/Seller/Login.vue';
+import SellerRegister from './pages/Seller/Register.vue';
+import SellerDashboard from './pages/Seller/Dashboard.vue';
+import SellerProfile from './pages/Seller/Profile.vue';
+import SellerStore from './pages/Seller/Store.vue';
+import SellerProducts from './pages/Seller/Products.vue';
+import SellerProductForm from './pages/Seller/ProductForm.vue';
+import SellerInventory from './pages/Seller/Inventory.vue';
+import SellerOrders from './pages/Seller/Orders.vue';
+import SellerOrderDetail from './pages/Seller/OrderDetail.vue';
 
 const pages = {
     Home,
