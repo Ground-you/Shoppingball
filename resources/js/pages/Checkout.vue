@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import StoreHeader from '../Components/StoreHeader.vue';
 
@@ -7,6 +7,7 @@ const props = defineProps({
     shortcuts: { type: Array, default: () => [] },
     buyer: { type: Object, default: null },
     payment: { type: Object, required: true },
+    paymentError: { type: String, default: '' },
     sku: { type: Object, required: true },
     quantity: { type: Number, default: 1 },
     addresses: { type: Array, default: () => [] },
@@ -28,7 +29,7 @@ const addressForm = reactive({
     address_line2: '',
     is_default: true,
 });
-const message = ref('');
+const message = ref(props.paymentError || '');
 const submitting = ref(false);
 const savingAddress = ref(false);
 const postcodeBox = ref(null);
@@ -44,6 +45,49 @@ const shipping = computed(() => {
     return props.sku.shippingFee;
 });
 const total = computed(() => props.sku.unitPrice * form.quantity + shipping.value);
+const widgets = ref(null);
+const widgetReady = ref(false);
+
+const loadToss = () => new Promise((resolve, reject) => {
+    if (window.TossPayments) {
+        resolve();
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://js.tosspayments.com/v2/standard';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('토스페이먼츠를 불러오지 못했습니다.'));
+    document.head.appendChild(script);
+});
+
+onMounted(async () => {
+    if (props.payment.driver !== 'toss' || !props.payment.tossClientKey || !props.addresses.length) {
+        return;
+    }
+
+    try {
+        await loadToss();
+        const instance = window.TossPayments(props.payment.tossClientKey).widgets({
+            customerKey: props.payment.customerKey,
+        });
+        await instance.setAmount({ currency: 'KRW', value: total.value });
+        await instance.renderPaymentMethods({ selector: '#toss-payment-method', variantKey: 'DEFAULT' });
+        await instance.renderAgreement({ selector: '#toss-agreement' });
+        widgets.value = instance;
+        widgetReady.value = true;
+    } catch (error) {
+        message.value = error.message || '토스 결제창을 열지 못했습니다.';
+    }
+});
+
+watch(total, async (value) => {
+    if (!widgets.value) {
+        return;
+    }
+
+    await widgets.value.setAmount({ currency: 'KRW', value });
+});
 
 const openPostcode = async () => {
     message.value = '';
@@ -94,6 +138,20 @@ const submit = async () => {
 
     try {
         const { data } = await axios.post('/checkout', form);
+
+        if (props.payment.driver === 'toss') {
+            await widgets.value.setAmount({ currency: 'KRW', value: data.amount });
+            await widgets.value.requestPayment({
+                orderId: data.orderNumber,
+                orderName: data.orderName,
+                successUrl: `${window.location.origin}/checkout/success`,
+                failUrl: `${window.location.origin}/checkout/fail`,
+                customerEmail: props.buyer.email,
+                customerName: props.buyer.name,
+            });
+            return;
+        }
+
         window.location.href = data.redirect;
     } catch (error) {
         const errors = error.response?.data?.errors || {};
@@ -145,10 +203,15 @@ const submit = async () => {
                         <p class="mt-2 flex justify-between font-bold"><span>결제 금액</span><span>{{ won(total) }}</span></p>
                     </div>
 
-                    <p v-if="payment.driver === 'manual'" class="text-sm text-neutral-500">테스트 결제로 바로 결제 완료 처리됩니다. 나중에 토스페이먼츠로 바꿀 수 있습니다.</p>
-                    <p v-else class="text-sm text-neutral-500">토스페이먼츠 키가 연결되면 이 주문번호로 결제를 확인합니다.</p>
+                    <div v-if="payment.driver === 'toss'" class="space-y-3">
+                        <p class="text-sm font-medium">결제수단</p>
+                        <p class="text-sm text-neutral-500">카드와 간편결제를 고른 뒤 결제하기를 누르면 토스 결제창이 열립니다.</p>
+                        <div id="toss-payment-method"></div>
+                        <div id="toss-agreement"></div>
+                    </div>
+                    <p v-else class="text-sm text-neutral-500">테스트 결제로 바로 결제 완료 처리됩니다. 나중에 토스페이먼츠로 바꿀 수 있습니다.</p>
                     <p v-if="message" class="text-sm text-brand">{{ message }}</p>
-                    <button type="submit" class="h-12 w-full rounded-lg bg-brand font-bold text-white disabled:opacity-60" :disabled="submitting || sku.soldOut || !form.address_id || payment.driver !== 'manual'">
+                    <button type="submit" class="h-12 w-full rounded-lg bg-brand font-bold text-white disabled:opacity-60" :disabled="submitting || sku.soldOut || !form.address_id || (payment.driver === 'toss' ? !widgetReady : payment.driver !== 'manual')">
                         {{ sku.soldOut ? '품절' : '결제하기' }}
                     </button>
                 </form>

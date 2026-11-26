@@ -40,6 +40,8 @@ Route::middleware('auth:buyer')->group(function () {
 
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
+    Route::get('/checkout/success', [CheckoutController::class, 'success'])->name('checkout.success');
+    Route::get('/checkout/fail', [CheckoutController::class, 'fail'])->name('checkout.fail');
     Route::post('/orders/{order}/cancel', [BuyerOrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/exchange', [BuyerOrderController::class, 'exchange'])->name('orders.exchange');
     Route::post('/orders/{order}/return', [BuyerOrderController::class, 'returnOrder'])->name('orders.return');

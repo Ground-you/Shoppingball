@@ -9,6 +9,7 @@ use App\Support\OrderService;
 use App\Support\ProductView;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class CheckoutController extends Controller
 {
@@ -23,7 +24,7 @@ class CheckoutController extends Controller
 
         $product = $sku->product;
         $policy = $product->store->policies()->orderByDesc('version_no')->first();
-        $unit = ProductView::money($product->sale_price) + ProductView::money($sku->additional_price);
+        $unit = ProductView::skuSale($product, $sku);
 
         return view('app', [
             'page' => [
@@ -33,10 +34,13 @@ class CheckoutController extends Controller
                     'loginId' => $buyer->login_id,
                     'name' => $buyer->buyer_name,
                     'nickname' => $buyer->nickname,
+                    'email' => $buyer->email,
                 ],
+                'paymentError' => mb_substr((string) $request->query('payment_error', ''), 0, 200),
                 'payment' => [
                     'driver' => $this->orders->driver(),
                     'tossClientKey' => config('payments.driver') === 'toss' ? config('payments.toss.client_key') : null,
+                    'customerKey' => 'buyer.'.substr(hash_hmac('sha256', (string) $buyer->id, (string) config('app.key')), 0, 40),
                 ],
                 'sku' => [
                     'id' => $sku->id,
@@ -44,7 +48,7 @@ class CheckoutController extends Controller
                     'option' => $sku->option_name,
                     'unitPrice' => $unit,
                     'stock' => $sku->stock_quantity,
-                    'soldOut' => $sku->status === 'SOLD_OUT',
+                    'soldOut' => $sku->status !== 'ON_SALE',
                     'image' => ($product->images->firstWhere('is_main', true) ?? $product->images->first())?->image_url,
                     'shippingFee' => ProductView::money($policy?->default_shipping_fee ?? 0),
                     'freeThreshold' => $policy?->free_shipping_threshold !== null ? ProductView::money($policy->free_shipping_threshold) : null,
@@ -81,6 +85,28 @@ class CheckoutController extends Controller
             $address['delivery_request'] = $data['delivery_request'];
         }
 
+        if ($this->orders->driver() === 'toss') {
+            $order = $this->orders->checkout(
+                $buyer,
+                (int) $data['sku_id'],
+                (int) $data['quantity'],
+                $address,
+                null,
+                true,
+            );
+            $order->load('items');
+            $request->session()->put('checkout_return', [
+                'sku' => (int) $data['sku_id'],
+                'quantity' => (int) $data['quantity'],
+            ]);
+
+            return response()->json([
+                'orderNumber' => $order->order_number,
+                'amount' => ProductView::money($order->final_payment_amount),
+                'orderName' => mb_substr((string) $order->items->first()?->product_name, 0, 100),
+            ]);
+        }
+
         $order = $this->orders->checkout(
             $buyer,
             (int) $data['sku_id'],
@@ -90,5 +116,42 @@ class CheckoutController extends Controller
         );
 
         return response()->json(['redirect' => route('mypage'), 'orderNumber' => $order->order_number]);
+    }
+
+    public function success(Request $request)
+    {
+        /** @var Buyer $buyer */
+        $buyer = Auth::guard('buyer')->user();
+
+        try {
+            $this->orders->confirmToss(
+                $buyer,
+                (string) $request->query('orderId', ''),
+                (string) $request->query('paymentKey', ''),
+                (int) $request->query('amount', 0),
+            );
+        } catch (ValidationException $exception) {
+            return $this->backToCheckout($request, collect($exception->errors())->flatten()->first() ?: '결제에 실패했습니다.');
+        }
+
+        return redirect()->route('mypage');
+    }
+
+    public function fail(Request $request)
+    {
+        $message = (string) $request->query('message', '결제가 취소되었습니다.');
+
+        return $this->backToCheckout($request, $message);
+    }
+
+    private function backToCheckout(Request $request, string $message)
+    {
+        $back = $request->session()->get('checkout_return', []);
+
+        return redirect()->route('checkout', array_filter([
+            'sku' => $back['sku'] ?? null,
+            'quantity' => $back['quantity'] ?? null,
+            'payment_error' => mb_substr($message, 0, 200),
+        ]));
     }
 }
