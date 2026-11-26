@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Seller;
 use App\Http\Controllers\Controller;
 use App\Support\BuyerInput;
 use App\Support\SellerContext;
+use App\Support\SellerInput;
 use App\Support\SellerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,12 +24,13 @@ class AccountController extends Controller
             'section' => 'profile',
             'profile' => [
                 'sellerName' => $seller->seller_name,
-                'managerName' => $seller->manager_name ?? '',
                 'representativeName' => $seller->representative_name ?? '',
                 'email' => $member->login_email,
                 'phone' => preg_replace('/\D/', '', (string) ($seller->contact_phone ?? '')),
                 'businessNumber' => $seller->business_registration_number,
-                'address' => $seller->business_address ?? '',
+                'postalCode' => $seller->business_postal_code ?? '',
+                'addressLine1' => $seller->business_address_line1 ?: ($seller->business_address ?? ''),
+                'addressLine2' => $seller->business_address_line2 ?? '',
                 'bankName' => $seller->settlement_bank_name ?? '',
                 'accountNumber' => $this->decryptAccount($seller->settlement_account_number_enc),
                 'accountHolder' => $seller->settlement_account_holder ?? '',
@@ -41,21 +43,26 @@ class AccountController extends Controller
         $member = SellerContext::member();
         $seller = SellerContext::seller();
 
+        $request->merge([
+            'business_registration_number' => SellerInput::prepareBusinessNumber($request->input('business_registration_number')),
+        ]);
+
         $data = $request->validate([
             'seller_name' => ['required', 'string', 'min:2', 'max:100'],
-            'manager_name' => ['required', 'string', 'min:2', 'max:50'],
-            'representative_name' => ['nullable', 'string', 'min:2', 'max:50'],
+            'representative_name' => ['required', 'string', 'min:2', 'max:50'],
             'login_email' => ['required', 'email:rfc', 'max:100', Rule::unique('seller_members', 'login_email')->ignore($member->id)],
             'contact_phone' => ['nullable', 'string', 'regex:/^\d+$/', 'min:8', 'max:20'],
-            'business_address' => ['nullable', 'string', 'max:255'],
+            'business_registration_number' => SellerInput::businessNumberRules($seller->id),
+            ...SellerInput::addressRules(),
             'settlement_bank_name' => ['nullable', 'string', 'max:50'],
             'settlement_account_number' => ['nullable', 'string', 'regex:/^\d+$/', 'min:8', 'max:30'],
             'settlement_account_holder' => ['nullable', 'string', 'max:50'],
         ], [
+            ...SellerInput::businessNumberMessages(),
+            ...SellerInput::addressMessages(),
             'seller_name.required' => '판매자 이름을 입력해 주세요.',
             'seller_name.min' => '판매자 이름은 2자 이상 입력해 주세요.',
-            'manager_name.required' => '담당자 이름을 입력해 주세요.',
-            'manager_name.min' => '담당자 이름은 2자 이상 입력해 주세요.',
+            'representative_name.required' => '대표자명을 입력해 주세요.',
             'representative_name.min' => '대표자명은 2자 이상 입력해 주세요.',
             'login_email.required' => '이메일을 입력해 주세요.',
             'login_email.email' => '이메일에는 @와 도메인이 필요합니다.',
@@ -72,10 +79,14 @@ class AccountController extends Controller
 
         $seller->update([
             'seller_name' => $data['seller_name'],
-            'manager_name' => $data['manager_name'],
-            'representative_name' => $data['representative_name'] ?: null,
+            'manager_name' => $data['representative_name'],
+            'representative_name' => $data['representative_name'],
             'contact_phone' => $data['contact_phone'] ?: null,
-            'business_address' => $data['business_address'] ?: null,
+            'business_registration_number' => $data['business_registration_number'],
+            'business_postal_code' => $data['business_postal_code'],
+            'business_address_line1' => $data['business_address_line1'],
+            'business_address_line2' => $data['business_address_line2'] ?: null,
+            'business_address' => SellerInput::addressText($data),
             'settlement_bank_name' => $data['settlement_bank_name'] ?: null,
             'settlement_account_number_enc' => $account !== '' ? Crypt::encryptString($account) : null,
             'settlement_account_holder' => $data['settlement_account_holder'] ?: null,
@@ -83,7 +94,7 @@ class AccountController extends Controller
 
         $member->update([
             'login_email' => $data['login_email'],
-            'member_name' => $data['manager_name'],
+            'member_name' => $data['representative_name'],
         ]);
 
         return response()->json(['message' => '판매자 정보를 저장했습니다.']);

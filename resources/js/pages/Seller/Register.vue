@@ -1,14 +1,16 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import axios from 'axios';
+import PostcodeAddress from '../../components/PostcodeAddress.vue';
 
 const form = reactive({
     seller_name: '',
     business_registration_number: '',
-    business_address: '',
+    business_postal_code: '',
+    business_address_line1: '',
+    business_address_line2: '',
     business_license_test: '',
     representative_name: '',
-    manager_name: '',
     contact_phone: '',
     login_email: '',
     password: '',
@@ -22,6 +24,7 @@ const message = ref('');
 const submitting = ref(false);
 
 const fieldError = (name) => errors.value[name]?.[0] || '';
+
 
 const digitsOnly = (event, field) => {
     form[field] = event.target.value.replace(/\D/g, '');
@@ -63,32 +66,29 @@ const submit = async () => {
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block font-medium">사업자등록번호</span>
-                        <input v-model="form.business_registration_number" type="text" placeholder="123-45-67890" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
+                        <input v-model="form.business_registration_number" type="text" inputmode="numeric" placeholder="000-00-00000" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
                         <span v-if="fieldError('business_registration_number')" class="mt-1 block text-xs text-brand">{{ fieldError('business_registration_number') }}</span>
                     </label>
-                    <label class="block text-sm">
+                    <div class="block text-sm">
                         <span class="mb-1 block font-medium">사업자 주소</span>
-                        <input v-model="form.business_address" type="text" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
-                        <span v-if="fieldError('business_address')" class="mt-1 block text-xs text-brand">{{ fieldError('business_address') }}</span>
-                    </label>
+                        <PostcodeAddress
+                            v-model:postal="form.business_postal_code"
+                            v-model:line1="form.business_address_line1"
+                            v-model:line2="form.business_address_line2"
+                            :error="fieldError('business_postal_code') || fieldError('business_address_line1') || fieldError('business_address_line2')"
+                        />
+                    </div>
                     <label class="block rounded-xl bg-neutral-50 p-4 text-sm">
                         <span class="mb-1 block font-medium">사업자등록증 (테스트)</span>
                         <input v-model="form.business_license_test" type="text" placeholder="예: 테스트 등록증" class="h-12 w-full rounded-lg border border-neutral-300 bg-white px-4 outline-none focus:border-brand">
                         <span class="mt-1 block text-xs text-neutral-400">파일 제출은 아직 연결하지 않았습니다. 확인용 문구만 저장합니다.</span>
                         <span v-if="fieldError('business_license_test')" class="mt-1 block text-xs text-brand">{{ fieldError('business_license_test') }}</span>
                     </label>
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <label class="block text-sm">
-                            <span class="mb-1 block font-medium">대표자명</span>
-                            <input v-model="form.representative_name" type="text" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
-                            <span v-if="fieldError('representative_name')" class="mt-1 block text-xs text-brand">{{ fieldError('representative_name') }}</span>
-                        </label>
-                        <label class="block text-sm">
-                            <span class="mb-1 block font-medium">담당자 이름</span>
-                            <input v-model="form.manager_name" type="text" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
-                            <span v-if="fieldError('manager_name')" class="mt-1 block text-xs text-brand">{{ fieldError('manager_name') }}</span>
-                        </label>
-                    </div>
+                    <label class="block text-sm">
+                        <span class="mb-1 block font-medium">대표자명</span>
+                        <input v-model="form.representative_name" type="text" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
+                        <span v-if="fieldError('representative_name')" class="mt-1 block text-xs text-brand">{{ fieldError('representative_name') }}</span>
+                    </label>
                     <label class="block text-sm">
                         <span class="mb-1 block font-medium">연락처</span>
                         <input :value="form.contact_phone" type="tel" inputmode="numeric" placeholder="01012345678" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand" @input="digitsOnly($event, 'contact_phone')">

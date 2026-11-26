@@ -37,6 +37,12 @@ class AuthController extends Controller
             ], 422);
         }
 
+        if ($buyer->status !== 'ACTIVE') {
+            return response()->json([
+                'message' => '사용할 수 없는 계정입니다.',
+            ], 422);
+        }
+
         Auth::guard('buyer')->login($buyer);
         $request->session()->regenerate();
         $buyer->forceFill(['last_login_at' => now()])->save();
