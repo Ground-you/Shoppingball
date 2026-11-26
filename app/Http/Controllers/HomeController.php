@@ -61,7 +61,7 @@ class HomeController extends Controller
 
         return [
             'id' => 'seller-products',
-            'title' => '판매자 상품',
+            'title' => '상품목록',
             'tone' => 'plain',
             'products' => $products->map(fn (Product $product) => ProductView::card($product))->values()->all(),
         ];

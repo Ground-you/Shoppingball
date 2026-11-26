@@ -56,7 +56,7 @@ class ProductView
             'discount' => self::discount($regular, $sale),
             'rating' => 0,
             'reviews' => 0,
-            'badge' => '판매자',
+            'badge' => null,
             'href' => '/products/'.$product->id,
         ];
     }
