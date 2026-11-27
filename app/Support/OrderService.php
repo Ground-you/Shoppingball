@@ -254,6 +254,7 @@ class OrderService
                 throw ValidationException::withMessages(['order' => '발송 전 주문만 취소할 수 있습니다.']);
             }
 
+            $this->guardRefunded($order);
             $this->guardOpenClaim($order);
 
             $claim = OrderClaim::query()->create([
@@ -285,6 +286,7 @@ class OrderService
                 throw ValidationException::withMessages(['order' => '취소된 주문은 교환할 수 없습니다.']);
             }
 
+            $this->guardRefunded($order);
             $this->guardOpenClaim($order);
             $item = $order->items->firstWhere('id', $itemId);
 
@@ -303,8 +305,9 @@ class OrderService
                 throw ValidationException::withMessages(['exchange_product_sku_id' => '같은 상품의 옵션만 교환할 수 있습니다.']);
             }
 
-            if ($exchange->status !== 'ON_SALE') {
-                throw ValidationException::withMessages(['exchange_product_sku_id' => '판매중인 옵션만 교환할 수 있습니다.']);
+            // 품절(SOLD_OUT) 옵션도 요청은 받는다. 재고 확인은 판매자가 승인할 때 한다.
+            if (! in_array($exchange->status, ['ON_SALE', 'SOLD_OUT'], true)) {
+                throw ValidationException::withMessages(['exchange_product_sku_id' => '판매가 중단된 옵션으로는 교환할 수 없습니다.']);
             }
 
             $claim = OrderClaim::query()->create([
@@ -335,6 +338,7 @@ class OrderService
                 throw ValidationException::withMessages(['order' => '배송이 완료된 주문만 환불을 요청할 수 있습니다.']);
             }
 
+            $this->guardRefunded($order);
             $this->guardOpenClaim($order);
 
             $claim = OrderClaim::query()->create([
@@ -509,6 +513,16 @@ class OrderService
                     throw ValidationException::withMessages(['decision' => '교환 요청만 승인할 수 있습니다.']);
                 }
 
+                foreach ($claim->items as $claimItem) {
+                    $target = ProductSku::query()->find($claimItem->exchange_product_sku_id);
+
+                    if (! $target || $target->status === 'STOPPED' || $target->stock_quantity < $claimItem->quantity) {
+                        throw ValidationException::withMessages([
+                            'decision' => '교환할 옵션의 재고가 부족합니다. 재고를 채운 뒤 승인하거나 요청을 거절해 주세요.',
+                        ]);
+                    }
+                }
+
                 $claim->forceFill([
                     'claim_status' => 'APPROVED',
                     'responded_at' => now(),
@@ -563,6 +577,7 @@ class OrderService
 
         return $orders->map(function (Order $order) use ($skus) {
             $open = $order->claims->contains(fn ($claim) => $claim->claim_status === 'REQUESTED');
+            $refunded = $this->isRefunded($order);
             $code = $order->order_status;
             $statusName = $this->claimHeadline($order) ?? StatusLabel::name('order', $code);
             $payment = $order->payments->sortByDesc('id')->first();
@@ -583,9 +598,9 @@ class OrderService
                 'paymentStatus' => StatusLabel::name('payment', $payment?->payment_status),
                 'refundAmount' => ProductView::money($refundAmount),
                 'finalPaymentAmount' => ProductView::money($order->final_payment_amount),
-                'canCancel' => in_array($code, ['PAID', 'ACCEPTED', 'PREPARING'], true) && ! $open,
-                'canExchange' => ! in_array($code, ['CANCELED', 'PENDING_PAYMENT'], true) && ! $open,
-                'canReturn' => in_array($code, ['DELIVERED', 'CONFIRMED'], true) && ! $open,
+                'canCancel' => in_array($code, ['PAID', 'ACCEPTED', 'PREPARING'], true) && ! $open && ! $refunded,
+                'canExchange' => ! in_array($code, ['CANCELED', 'PENDING_PAYMENT'], true) && ! $open && ! $refunded,
+                'canReturn' => in_array($code, ['DELIVERED', 'CONFIRMED'], true) && ! $open && ! $refunded,
                 'canDelete' => in_array($code, ['CANCELED', 'DELIVERED', 'CONFIRMED'], true),
                 'tracking' => [
                     'shipped' => in_array($code, ['SHIPPING', 'DELIVERED'], true),
@@ -610,7 +625,8 @@ class OrderService
                             'id' => $option->id,
                             'name' => $option->option_name,
                             'stock' => $option->stock_quantity,
-                            'soldOut' => $option->status !== 'ON_SALE',
+                            'soldOut' => $option->status === 'SOLD_OUT' || $option->stock_quantity < 1,
+                            'stopped' => $option->status === 'STOPPED',
                         ])->values(),
                     ];
                 })->values(),
@@ -1029,7 +1045,7 @@ class OrderService
             throw ValidationException::withMessages(['order' => '주문을 찾을 수 없습니다.']);
         }
 
-        $locked->load('items', 'claims');
+        $locked->load('items', 'claims', 'payments');
 
         return $locked;
     }
@@ -1056,6 +1072,23 @@ class OrderService
 
         if (! $ownsAll) {
             abort(404);
+        }
+    }
+
+    private function isRefunded(Order $order): bool
+    {
+        $order->loadMissing('items', 'claims', 'payments');
+
+        return $order->order_status === 'CANCELED'
+            || $order->payments->contains(fn ($payment) => $payment->payment_status === 'CANCELED')
+            || $order->claims->contains(fn ($claim) => $claim->claim_status === 'COMPLETED' && in_array($claim->claim_type, ['CANCEL', 'RETURN'], true))
+            || $order->items->contains(fn ($item) => in_array($item->item_status, ['RETURNED', 'CANCELED'], true));
+    }
+
+    private function guardRefunded(Order $order): void
+    {
+        if ($this->isRefunded($order)) {
+            throw ValidationException::withMessages(['order' => '이미 환불이 완료된 주문입니다.']);
         }
     }
 
