@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import StoreHeader from '../Components/StoreHeader.vue';
+import StoreHeader from '../components/StoreHeader.vue';
 
 const props = defineProps({
     shortcuts: { type: Array, default: () => [] },

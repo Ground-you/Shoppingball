@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import axios from 'axios';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 
 const props = defineProps({
     account: { type: Object, required: true },

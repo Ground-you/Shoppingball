@@ -1,5 +1,5 @@
 <script setup>
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 
 defineProps({
     account: { type: Object, required: true },

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 import DetailEditor from '../../components/DetailEditor.vue';
 import ProductDetail from '../ProductDetail.vue';
 import { firstError } from '../../sellerError';

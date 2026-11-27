@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import axios from 'axios';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 import PostcodeAddress from '../../components/PostcodeAddress.vue';
 import { firstError } from '../../sellerError';
 

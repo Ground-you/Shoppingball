@@ -1,6 +1,6 @@
 <script setup>
 import { reactive } from 'vue';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 
 const props = defineProps({
     account: { type: Object, required: true },
