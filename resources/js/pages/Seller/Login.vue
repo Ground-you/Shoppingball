@@ -56,13 +56,6 @@ const submit = async () => {
             <a href="/seller/register" class="mt-4 block rounded-2xl border border-neutral-300 bg-white py-4 text-center text-sm font-medium">
                 판매자 회원가입
             </a>
-
-            <section class="mt-4 rounded-2xl border border-neutral-200 bg-white px-6 py-5 text-sm leading-6 text-neutral-600">
-                <p class="font-bold text-neutral-800">임시 판매자 계정</p>
-                <p>이메일 seller@ccuppang.test</p>
-                <p>비밀번호 Seller1!</p>
-                <p class="mt-1 text-[12px] text-neutral-400">입점 심사 없이 상품, 상점, 가격, 재고 권한을 사용할 수 있습니다.</p>
-            </section>
         </main>
     </div>
 </template>
