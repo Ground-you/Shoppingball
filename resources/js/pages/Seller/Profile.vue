@@ -1,7 +1,8 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import axios from 'axios';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
+import PostcodeAddress from '../../components/PostcodeAddress.vue';
 import { firstError } from '../../sellerError';
 
 const props = defineProps({
@@ -12,11 +13,13 @@ const props = defineProps({
 
 const form = reactive({
     seller_name: props.profile.sellerName,
-    manager_name: props.profile.managerName,
     representative_name: props.profile.representativeName,
     login_email: props.profile.email,
     contact_phone: props.profile.phone,
-    business_address: props.profile.address,
+    business_registration_number: props.profile.businessNumber,
+    business_postal_code: props.profile.postalCode,
+    business_address_line1: props.profile.addressLine1,
+    business_address_line2: props.profile.addressLine2,
     settlement_bank_name: props.profile.bankName,
     settlement_account_number: props.profile.accountNumber,
     settlement_account_holder: props.profile.accountHolder,
@@ -84,10 +87,6 @@ const withdraw = async () => {
                     <input v-model="form.seller_name" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
                 </label>
                 <label class="block text-sm">
-                    <span class="mb-1 block text-[12px] text-neutral-500">담당자 이름</span>
-                    <input v-model="form.manager_name" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
-                </label>
-                <label class="block text-sm">
                     <span class="mb-1 block text-[12px] text-neutral-500">대표자명</span>
                     <input v-model="form.representative_name" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
                 </label>
@@ -101,12 +100,17 @@ const withdraw = async () => {
                 </label>
                 <label class="block text-sm">
                     <span class="mb-1 block text-[12px] text-neutral-500">사업자등록번호</span>
-                    <input :value="profile.businessNumber" disabled class="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-neutral-500">
+                    <input v-model="form.business_registration_number" type="text" inputmode="numeric" placeholder="000-00-00000" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
                 </label>
-                <label class="block text-sm sm:col-span-2">
+                <div class="block text-sm sm:col-span-2">
                     <span class="mb-1 block text-[12px] text-neutral-500">사업자 주소</span>
-                    <input v-model="form.business_address" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">
-                </label>
+                    <PostcodeAddress
+                        v-model:postal="form.business_postal_code"
+                        v-model:line1="form.business_address_line1"
+                        v-model:line2="form.business_address_line2"
+                        input-class="h-11"
+                    />
+                </div>
                 <label class="block text-sm">
                     <span class="mb-1 block text-[12px] text-neutral-500">정산 은행</span>
                     <input v-model="form.settlement_bank_name" class="h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none focus:border-brand">

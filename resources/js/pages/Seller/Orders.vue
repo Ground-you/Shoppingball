@@ -1,6 +1,6 @@
 <script setup>
 import { reactive } from 'vue';
-import SellerShell from '../../Components/SellerShell.vue';
+import SellerShell from '../../components/SellerShell.vue';
 
 const props = defineProps({
     account: { type: Object, required: true },
@@ -34,7 +34,8 @@ const search = () => {
                 <h1 class="text-[22px] font-bold">주문 관리</h1>
                 <div class="flex gap-2 text-sm">
                     <a href="/seller/orders" class="rounded-lg px-3 py-2" :class="status === '' ? 'bg-brand font-bold text-white' : 'bg-neutral-100'">전체</a>
-                    <a href="/seller/orders?status=PREPARING" class="rounded-lg px-3 py-2" :class="status === 'PREPARING' ? 'bg-brand font-bold text-white' : 'bg-neutral-100'">신규 주문</a>
+                    <a href="/seller/orders?status=PAID" class="rounded-lg px-3 py-2" :class="status === 'PAID' ? 'bg-brand font-bold text-white' : 'bg-neutral-100'">신규 주문</a>
+                    <a href="/seller/orders?status=CLAIM" class="rounded-lg px-3 py-2" :class="status === 'CLAIM' ? 'bg-brand font-bold text-white' : 'bg-neutral-100'">취소·환불 요청</a>
                 </div>
             </div>
             <form class="mt-4 flex gap-2" @submit.prevent="search">
@@ -54,7 +55,7 @@ const search = () => {
                     {{ item.name }} / {{ item.option }} · {{ item.quantity }}개
                 </p>
                 <p class="mt-2 text-sm">
-                    <span class="font-medium">{{ order.statusName }}</span>
+                    <span class="font-medium" :class="order.statusName.includes('요청') ? 'text-brand' : ''">{{ order.statusName }}</span>
                     <span class="text-neutral-500"> · {{ order.payment.status }} · {{ order.recipient }} · {{ won(order.amount) }}</span>
                 </p>
             </article>
