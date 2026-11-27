@@ -19,12 +19,13 @@ class OrderController extends Controller
     {
         $store = SellerContext::store();
         $status = $request->string('status')->toString();
+        $status = in_array($status, ['PAID', 'CLAIM'], true) ? $status : '';
 
         return SellerPage::render('SellerOrders', [
             'section' => 'orders',
             'keyword' => $request->string('q')->toString(),
-            'status' => $status === 'PREPARING' ? 'PREPARING' : '',
-            'orders' => $this->orders->sellerRows($store, $request->string('q')->toString(), $status === 'PREPARING' ? 'PREPARING' : null),
+            'status' => $status,
+            'orders' => $this->orders->sellerRows($store, $request->string('q')->toString(), $status !== '' ? $status : null),
         ]);
     }
 

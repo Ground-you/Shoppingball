@@ -10,6 +10,7 @@ class StatusLabel
             'order' => [
                 'PENDING_PAYMENT' => '결제대기',
                 'PAID' => '결제완료',
+                'ACCEPTED' => '주문승인',
                 'PREPARING' => '상품준비중',
                 'SHIPPING' => '상품발송',
                 'DELIVERED' => '상품도착',
@@ -44,11 +45,12 @@ class StatusLabel
                 'COMPLETED' => '완료',
             ],
             'shipment' => [
-                'PREPARING' => '상품준비중',
+                'PREPARING' => '배송준비중',
                 'SHIPPING' => '상품발송',
                 'DELIVERED' => '상품도착',
             ],
             'sale' => [
+                'DRAFT' => '임시저장',
                 'ON_SALE' => '판매중',
                 'SOLD_OUT' => '품절',
                 'STOPPED' => '판매중지',

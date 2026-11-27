@@ -8,41 +8,15 @@ use Illuminate\Support\Facades\Auth;
 
 class HomeController extends Controller
 {
-    // 홈 인덱스. 상품은 resources/data/catalog.php, 사진은 public/images 에서 읽는다.
+    // 홈은 판매중인 판매자 상품만 보여 준다. 배너 이미지는 resources/data/catalog.php 에 있다.
     public function index()
     {
         $catalog = require resource_path('data/catalog.php');
-        $products = collect($catalog['products'])->values();
-
-        $sections = collect($catalog['sections'])->map(function (array $section) use ($products) {
-            $items = $products
-                ->filter(fn (array $product) => in_array($section['key'], $product['sections'], true))
-                ->values();
-
-            return [
-                'id' => $section['key'],
-                'title' => $section['title'],
-                'tone' => $section['tone'],
-                'products' => $this->presentMany($items),
-            ];
-        });
-
-        $recommended = $products
-            ->filter(fn (array $product) => $product['is_recommended'])
-            ->values();
-
-        if ($recommended->isNotEmpty()) {
-            $sections->prepend([
-                'id' => 'recommended',
-                'title' => '추천 상품',
-                'tone' => 'plain',
-                'products' => $this->presentMany($recommended),
-            ]);
-        }
-
+        $sections = collect();
         $sellerSection = $this->sellerSection();
+
         if ($sellerSection) {
-            $sections->prepend($sellerSection);
+            $sections->push($sellerSection);
         }
 
         $buyer = Auth::guard('buyer')->user();
@@ -71,7 +45,7 @@ class HomeController extends Controller
     private function sellerSection(): ?array
     {
         $products = Product::query()
-            ->with('images')
+            ->with(['images', 'skus'])
             ->where('sale_status', 'ON_SALE')
             ->where('approval_status', 'APPROVED')
             ->whereHas('store', function ($query) {
@@ -87,32 +61,10 @@ class HomeController extends Controller
 
         return [
             'id' => 'seller-products',
-            'title' => '판매자 상품',
+            'title' => '상품목록',
             'tone' => 'plain',
             'products' => $products->map(fn (Product $product) => ProductView::card($product))->values()->all(),
         ];
     }
 
-    private function presentMany($products): array
-    {
-        return $products->map(function (array $product) {
-            $original = (int) $product['original_price'];
-            $price = (int) $product['price'];
-            $discount = $original > 0 ? (int) round((1 - $price / $original) * 100) : 0;
-
-            return [
-                'id' => $product['image'],
-                'example' => true,
-                'name' => $product['name'],
-                'description' => $product['description'],
-                'image' => $product['image'],
-                'price' => $price,
-                'originalPrice' => $original,
-                'discount' => $discount,
-                'rating' => $product['rating'],
-                'reviews' => $product['review_count'],
-                'badge' => $product['badge'],
-            ];
-        })->values()->all();
-    }
 }

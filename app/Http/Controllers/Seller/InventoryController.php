@@ -77,7 +77,7 @@ class InventoryController extends Controller
             'skuCode' => $sku->sku_code,
             'stock' => $sku->stock_quantity,
             'soldOut' => $soldOut,
-            'additionalPrice' => ProductView::money($sku->additional_price),
+            'salePrice' => ProductView::skuSale($sku->product, $sku),
             'low' => $sku->stock_quantity <= 5 && ! $soldOut,
         ];
     }
