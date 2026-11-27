@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import axios from 'axios';
-import StoreHeader from '../Components/StoreHeader.vue';
+import StoreHeader from '../components/StoreHeader.vue';
 
 defineProps({
     shortcuts: { type: Array, default: () => [] },

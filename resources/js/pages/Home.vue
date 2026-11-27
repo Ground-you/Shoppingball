@@ -1,6 +1,6 @@
 <script setup>
-import StoreHeader from '../Components/StoreHeader.vue';
-import ProductSection from '../Components/ProductSection.vue';
+import StoreHeader from '../components/StoreHeader.vue';
+import ProductSection from '../components/ProductSection.vue';
 
 defineProps({
     shortcuts: { type: Array, default: () => [] },
