@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import StoreHeader from '../components/StoreHeader.vue';
 
@@ -7,15 +7,16 @@ const props = defineProps({
     shortcuts: { type: Array, default: () => [] },
     buyer: { type: Object, default: null },
     payment: { type: Object, required: true },
-    sku: { type: Object, required: true },
-    quantity: { type: Number, default: 1 },
+    paymentError: { type: String, default: '' },
+    storeName: { type: String, default: '' },
+    items: { type: Array, required: true },
+    shipping: { type: Object, required: true },
     addresses: { type: Array, default: () => [] },
 });
 
 const defaultAddress = props.addresses.find((address) => address.is_default) || props.addresses[0];
 const form = reactive({
-    sku_id: props.sku.id,
-    quantity: Math.min(Math.max(props.quantity, 1), Math.max(props.sku.stock, 1)),
+    items: props.items.map((item) => ({ sku_id: item.skuId, quantity: item.quantity })),
     address_id: defaultAddress?.id || '',
     delivery_request: '',
 });
@@ -28,22 +29,66 @@ const addressForm = reactive({
     address_line2: '',
     is_default: true,
 });
-const message = ref('');
+const message = ref(props.paymentError || '');
 const submitting = ref(false);
 const savingAddress = ref(false);
 const postcodeBox = ref(null);
 const postcodeOpen = ref(false);
 const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
 
-const shipping = computed(() => {
-    const productAmount = props.sku.unitPrice * form.quantity;
-    if (props.sku.freeThreshold !== null && productAmount >= props.sku.freeThreshold) {
+const productAmount = computed(() => props.items.reduce((sum, item, index) => sum + item.unitPrice * (Number(form.items[index].quantity) || 0), 0));
+const shippingFee = computed(() => {
+    if (props.shipping.freeThreshold !== null && productAmount.value >= props.shipping.freeThreshold) {
         return 0;
     }
 
-    return props.sku.shippingFee;
+    return props.shipping.fee;
 });
-const total = computed(() => props.sku.unitPrice * form.quantity + shipping.value);
+const total = computed(() => productAmount.value + shippingFee.value);
+const hasSoldOut = computed(() => props.items.some((item) => item.soldOut));
+const widgets = ref(null);
+const widgetReady = ref(false);
+
+const loadToss = () => new Promise((resolve, reject) => {
+    if (window.TossPayments) {
+        resolve();
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://js.tosspayments.com/v2/standard';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('토스페이먼츠를 불러오지 못했습니다.'));
+    document.head.appendChild(script);
+});
+
+onMounted(async () => {
+    if (props.payment.driver !== 'toss' || !props.payment.tossClientKey || !props.addresses.length) {
+        return;
+    }
+
+    try {
+        await loadToss();
+        const instance = window.TossPayments(props.payment.tossClientKey).widgets({
+            customerKey: props.payment.customerKey,
+        });
+        await instance.setAmount({ currency: 'KRW', value: total.value });
+        await instance.renderPaymentMethods({ selector: '#toss-payment-method', variantKey: 'DEFAULT' });
+        await instance.renderAgreement({ selector: '#toss-agreement' });
+        widgets.value = instance;
+        widgetReady.value = true;
+    } catch (error) {
+        message.value = error.message || '토스 결제창을 열지 못했습니다.';
+    }
+});
+
+watch(total, async (value) => {
+    if (!widgets.value) {
+        return;
+    }
+
+    await widgets.value.setAmount({ currency: 'KRW', value });
+});
 
 const openPostcode = async () => {
     message.value = '';
@@ -94,6 +139,20 @@ const submit = async () => {
 
     try {
         const { data } = await axios.post('/checkout', form);
+
+        if (props.payment.driver === 'toss') {
+            await widgets.value.setAmount({ currency: 'KRW', value: data.amount });
+            await widgets.value.requestPayment({
+                orderId: data.orderNumber,
+                orderName: data.orderName,
+                successUrl: `${window.location.origin}/checkout/success`,
+                failUrl: `${window.location.origin}/checkout/fail`,
+                customerEmail: props.buyer.email,
+                customerName: props.buyer.name,
+            });
+            return;
+        }
+
         window.location.href = data.redirect;
     } catch (error) {
         const errors = error.response?.data?.errors || {};
@@ -109,19 +168,22 @@ const submit = async () => {
         <main class="mx-auto max-w-[720px] px-5 py-8">
             <section class="rounded-2xl border border-neutral-200 bg-white p-6">
                 <h1 class="text-[24px] font-bold">주문하기</h1>
-                <div class="mt-5 flex gap-4">
-                    <img v-if="sku.image" :src="sku.image" alt="" class="h-24 w-24 rounded-xl object-cover">
-                    <div>
-                        <p class="font-medium">{{ sku.name }}</p>
-                        <p class="mt-1 text-sm text-neutral-500">{{ sku.option }}</p>
-                        <p class="mt-2 font-bold">{{ won(sku.unitPrice) }}</p>
-                    </div>
-                </div>
-
-                <label class="mt-6 block text-sm">
-                    <span class="mb-1 block font-medium">수량</span>
-                    <input v-model.number="form.quantity" type="number" min="1" :max="sku.stock" class="h-12 w-28 rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
-                </label>
+                <p v-if="storeName" class="mt-2 text-sm text-neutral-500">{{ storeName }}</p>
+                <ul class="mt-5 divide-y divide-neutral-200">
+                    <li v-for="(item, index) in items" :key="item.skuId" class="flex gap-4 py-4 first:pt-0">
+                        <img v-if="item.image" :src="item.image" alt="" class="h-24 w-24 rounded-xl object-cover">
+                        <div class="min-w-0 flex-1">
+                            <p class="font-medium">{{ item.name }}</p>
+                            <p class="mt-1 text-sm text-neutral-500">{{ item.option }}</p>
+                            <p class="mt-2 font-bold">{{ won(item.unitPrice) }}</p>
+                            <p v-if="item.soldOut" class="mt-1 text-sm text-brand">품절된 상품입니다.</p>
+                            <label v-else class="mt-2 flex items-center gap-2 text-sm">
+                                <span class="font-medium">수량</span>
+                                <input v-model.number="form.items[index].quantity" type="number" min="1" :max="item.stock" class="h-10 w-24 rounded-lg border border-neutral-300 px-3 outline-none focus:border-brand">
+                            </label>
+                        </div>
+                    </li>
+                </ul>
 
                 <form v-if="addresses.length" class="mt-4 space-y-4" @submit.prevent="submit">
                     <div class="space-y-2">
@@ -140,16 +202,21 @@ const submit = async () => {
                     <input v-model="form.delivery_request" type="text" placeholder="배송 요청사항" class="h-12 w-full rounded-lg border border-neutral-300 px-4 text-sm outline-none focus:border-brand">
 
                     <div class="rounded-xl bg-neutral-50 px-4 py-3 text-sm">
-                        <p class="flex justify-between"><span>상품 금액</span><span>{{ won(sku.unitPrice * form.quantity) }}</span></p>
-                        <p class="mt-1 flex justify-between"><span>배송비</span><span>{{ won(shipping) }}</span></p>
+                        <p class="flex justify-between"><span>상품 금액</span><span>{{ won(productAmount) }}</span></p>
+                        <p class="mt-1 flex justify-between"><span>배송비</span><span>{{ won(shippingFee) }}</span></p>
                         <p class="mt-2 flex justify-between font-bold"><span>결제 금액</span><span>{{ won(total) }}</span></p>
                     </div>
 
-                    <p v-if="payment.driver === 'manual'" class="text-sm text-neutral-500">테스트 결제로 바로 결제 완료 처리됩니다. 나중에 토스페이먼츠로 바꿀 수 있습니다.</p>
-                    <p v-else class="text-sm text-neutral-500">토스페이먼츠 키가 연결되면 이 주문번호로 결제를 확인합니다.</p>
+                    <div v-if="payment.driver === 'toss'" class="space-y-3">
+                        <p class="text-sm font-medium">결제수단</p>
+                        <p class="text-sm text-neutral-500">카드와 간편결제를 고른 뒤 결제하기를 누르면 토스 결제창이 열립니다.</p>
+                        <div id="toss-payment-method"></div>
+                        <div id="toss-agreement"></div>
+                    </div>
+                    <p v-else class="text-sm text-neutral-500">테스트 결제로 바로 결제 완료 처리됩니다. 나중에 토스페이먼츠로 바꿀 수 있습니다.</p>
                     <p v-if="message" class="text-sm text-brand">{{ message }}</p>
-                    <button type="submit" class="h-12 w-full rounded-lg bg-brand font-bold text-white disabled:opacity-60" :disabled="submitting || sku.soldOut || !form.address_id || payment.driver !== 'manual'">
-                        {{ sku.soldOut ? '품절' : '결제하기' }}
+                    <button type="submit" class="h-12 w-full rounded-lg bg-brand font-bold text-white disabled:opacity-60" :disabled="submitting || hasSoldOut || !form.address_id || (payment.driver === 'toss' ? !widgetReady : payment.driver !== 'manual')">
+                        {{ hasSoldOut ? '품절 상품 포함' : '결제하기' }}
                     </button>
                 </form>
 

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BuyerOrderController;
+use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProfileController;
@@ -38,10 +39,20 @@ Route::middleware('auth:buyer')->group(function () {
     Route::delete('/mypage/payment-methods/{paymentMethod}', [ProfileController::class, 'destroyPaymentMethod'])->name('mypage.payments.destroy');
     Route::post('/withdraw', [AuthController::class, 'withdraw'])->name('withdraw.store');
 
+    Route::get('/cart', [CartController::class, 'show'])->name('cart');
+    Route::get('/cart/count', [CartController::class, 'count'])->name('cart.count');
+    Route::post('/cart', [CartController::class, 'store'])->name('cart.store');
+    Route::patch('/cart/{cartItem}', [CartController::class, 'update'])->name('cart.update');
+    Route::delete('/cart/{cartItem}', [CartController::class, 'destroy'])->name('cart.destroy');
+
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
+    Route::get('/checkout/success', [CheckoutController::class, 'success'])->name('checkout.success');
+    Route::get('/checkout/fail', [CheckoutController::class, 'fail'])->name('checkout.fail');
     Route::post('/orders/{order}/cancel', [BuyerOrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/exchange', [BuyerOrderController::class, 'exchange'])->name('orders.exchange');
+    Route::post('/orders/{order}/return', [BuyerOrderController::class, 'returnOrder'])->name('orders.return');
+    Route::delete('/orders/{order}', [BuyerOrderController::class, 'destroy'])->name('orders.destroy');
 });
 
 Route::get('/products/{product}', [StorefrontProductController::class, 'show'])->name('products.show');
@@ -69,7 +80,10 @@ Route::prefix('seller')->name('seller.')->group(function () {
         Route::get('/products', [SellerProductController::class, 'index'])->name('products.index');
         Route::get('/products/create', [SellerProductController::class, 'create'])->name('products.create');
         Route::post('/products', [SellerProductController::class, 'store'])->name('products.store');
+        Route::post('/products/autosave', [SellerProductController::class, 'autosave'])->name('products.autosave');
+        Route::post('/products/detail-images', [SellerProductController::class, 'detailImage'])->name('products.detail-images');
         Route::post('/products/bulk', [SellerProductController::class, 'bulk'])->name('products.bulk');
+        Route::post('/products/{product}/autosave', [SellerProductController::class, 'autosaveExisting'])->name('products.autosave.existing');
         Route::get('/products/{product}/edit', [SellerProductController::class, 'edit'])->name('products.edit');
         Route::post('/products/{product}', [SellerProductController::class, 'update'])->name('products.update');
         Route::delete('/products/{product}', [SellerProductController::class, 'destroy'])->name('products.destroy');

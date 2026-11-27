@@ -19,12 +19,14 @@ const form = reactive({
     marketing_consent: false,
 });
 const errors = ref({});
+const message = ref('');
 const submitting = ref(false);
 
 const fieldError = (name) => errors.value[name]?.[0] || '';
 
 const submit = async () => {
     errors.value = {};
+    message.value = '';
     submitting.value = true;
 
     try {
@@ -33,6 +35,14 @@ const submit = async () => {
     } catch (error) {
         errors.value = error.response?.data?.errors || {};
         submitting.value = false;
+
+        if (Object.keys(errors.value).length) {
+            message.value = '입력한 내용을 확인해 주세요.';
+        } else if (error.response?.status === 419) {
+            message.value = '화면이 오래되었습니다. 새로고침한 뒤 다시 시도해 주세요.';
+        } else {
+            message.value = error.response?.data?.message || '가입에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+        }
     }
 };
 </script>
@@ -45,6 +55,8 @@ const submit = async () => {
             <section class="rounded-2xl border border-neutral-200 bg-white px-8 py-10">
                 <h1 class="text-center text-[28px] font-bold">회원가입</h1>
                 <p class="mt-2 text-center text-sm text-neutral-500">회원 정보를 입력해 주세요.</p>
+
+                <p v-if="message" class="mt-6 rounded-lg bg-neutral-100 px-4 py-3 text-sm text-brand" role="alert">{{ message }}</p>
 
                 <form class="mt-8 space-y-4" @submit.prevent="submit">
                     <label class="block text-sm">
@@ -61,6 +73,7 @@ const submit = async () => {
                     <label class="block text-sm">
                         <span class="mb-1 block font-medium">비밀번호 확인</span>
                         <input v-model="form.password_confirmation" type="password" autocomplete="new-password" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
+                        <span v-if="fieldError('password_confirmation')" class="mt-1 block text-xs text-brand">{{ fieldError('password_confirmation') }}</span>
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block font-medium">이름</span>
@@ -80,7 +93,8 @@ const submit = async () => {
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block font-medium">휴대폰</span>
-                        <input v-model="form.phone" type="tel" autocomplete="tel" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
+                        <input v-model="form.phone" type="tel" autocomplete="tel" placeholder="010-1234-5678" class="h-12 w-full rounded-lg border border-neutral-300 px-4 outline-none focus:border-brand">
+                        <span v-if="fieldError('phone')" class="mt-1 block text-xs text-brand">{{ fieldError('phone') }}</span>
                     </label>
                     <label class="flex items-center gap-2 text-sm text-neutral-600">
                         <input v-model="form.marketing_consent" type="checkbox" class="h-4 w-4 accent-brand">

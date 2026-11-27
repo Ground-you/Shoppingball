@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Buyer;
 use App\Models\BuyerAddress;
+use App\Models\CartItem;
 use App\Models\Carrier;
 use App\Models\Order;
 use App\Models\OrderClaim;
@@ -27,45 +28,101 @@ class OrderService
         return $this->gateway->driver();
     }
 
-    public function checkout(Buyer $buyer, int $skuId, int $quantity, array $address, ?string $paymentKey = null): Order
+    public function checkout(Buyer $buyer, int $skuId, int $quantity, array $address, ?string $paymentKey = null, bool $deferCharge = false): Order
     {
-        return DB::transaction(function () use ($buyer, $skuId, $quantity, $address, $paymentKey) {
-            $sku = ProductSku::query()->whereKey($skuId)->lockForUpdate()->first();
+        return $this->checkoutItems($buyer, [['sku_id' => $skuId, 'quantity' => $quantity]], $address, $paymentKey, $deferCharge);
+    }
 
-            if (! $sku) {
-                throw ValidationException::withMessages(['sku' => '상품 옵션을 찾을 수 없습니다.']);
-            }
+    /**
+     * 한 판매자의 상품 여러 개를 한 주문으로 결제한다. (바로구매는 1개, 장바구니는 여러 개)
+     *
+     * @param  array<int, array{sku_id:int, quantity:int}>  $lines
+     */
+    public function checkoutItems(Buyer $buyer, array $lines, array $address, ?string $paymentKey = null, bool $deferCharge = false): Order
+    {
+        $quantities = [];
 
-            $sku->load(['product.store.seller']);
-            $product = $sku->product;
-            $store = $product?->store;
+        foreach ($lines as $line) {
+            $id = (int) $line['sku_id'];
+            $quantities[$id] = ($quantities[$id] ?? 0) + (int) $line['quantity'];
+        }
 
-            if (
-                ! $product
-                || ! $store
-                || ! $store->seller
-                || $product->sale_status !== 'ON_SALE'
-                || $product->approval_status !== 'APPROVED'
-                || $store->operation_status !== 'OPEN'
-            ) {
-                throw ValidationException::withMessages(['sku' => '지금 구매할 수 없는 상품입니다.']);
-            }
+        if (! $quantities) {
+            throw ValidationException::withMessages(['sku' => '주문할 상품이 없습니다.']);
+        }
 
-            if ($sku->status === 'SOLD_OUT' || $sku->stock_quantity < $quantity) {
-                throw ValidationException::withMessages(['quantity' => '재고가 부족합니다.']);
+        ksort($quantities);
+
+        return DB::transaction(function () use ($buyer, $quantities, $address, $paymentKey, $deferCharge) {
+            // 교착 방지를 위해 id 순서대로 잠근다.
+            $skus = ProductSku::query()->whereIn('id', array_keys($quantities))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $store = null;
+            $rows = [];
+            $productAmount = 0;
+
+            foreach ($quantities as $skuId => $quantity) {
+                $sku = $skus->get($skuId);
+
+                if (! $sku) {
+                    throw ValidationException::withMessages(['sku' => '상품 옵션을 찾을 수 없습니다.']);
+                }
+
+                $sku->load(['product.store.seller']);
+                $product = $sku->product;
+                $itemStore = $product?->store;
+
+                if (
+                    ! $product
+                    || ! $itemStore
+                    || ! $itemStore->seller
+                    || $product->sale_status !== 'ON_SALE'
+                    || $product->approval_status !== 'APPROVED'
+                    || $itemStore->operation_status !== 'OPEN'
+                    || $sku->status !== 'ON_SALE'
+                ) {
+                    throw ValidationException::withMessages(['sku' => '지금 구매할 수 없는 상품이 있습니다: '.($product?->product_name ?? '알 수 없는 상품')]);
+                }
+
+                if ($store && $store->id !== $itemStore->id) {
+                    throw ValidationException::withMessages(['sku' => '서로 다른 판매자의 상품은 한 번에 주문할 수 없습니다.']);
+                }
+
+                $store = $itemStore;
+
+                if ($sku->stock_quantity < $quantity) {
+                    throw ValidationException::withMessages(['quantity' => '재고가 부족합니다: '.$product->product_name.' '.$sku->option_name]);
+                }
+
+                $unit = ProductView::skuSale($product, $sku);
+                $rows[] = ['sku' => $sku, 'product' => $product, 'quantity' => $quantity, 'unit' => $unit];
+                $productAmount += $unit * $quantity;
             }
 
             $policy = $this->policyFor($store);
-            $unit = ProductView::money($product->sale_price) + ProductView::money($sku->additional_price);
-            $productAmount = $unit * $quantity;
             $shipping = $this->shippingFee($policy, $productAmount);
             $final = $productAmount + $shipping;
             $orderNumber = $this->number('C');
+            $orderName = $this->orderName(array_map(fn ($row) => $row['product']->product_name, $rows));
+            $skuIds = array_keys($quantities);
 
-            $order = Order::query()->create([
-                'order_number' => $orderNumber,
-                'buyer_id' => $buyer->id,
-                'order_status' => 'PREPARING',
+            $createItems = function (Order $order) use ($rows, $store, $policy) {
+                foreach ($rows as $row) {
+                    OrderItem::query()->create([
+                        'order_id' => $order->id,
+                        'product_sku_id' => $row['sku']->id,
+                        'store_id' => $store->id,
+                        'applied_policy_id' => $policy->id,
+                        'product_name' => $row['product']->product_name,
+                        'option_name' => $row['sku']->option_name,
+                        'unit_price' => $row['unit'],
+                        'quantity' => $row['quantity'],
+                        'item_amount' => $row['unit'] * $row['quantity'],
+                        'item_status' => 'PREPARING',
+                    ]);
+                }
+            };
+
+            $fields = [
                 'recipient_name' => $address['recipient_name'],
                 'recipient_phone' => $address['recipient_phone'],
                 'shipping_postal_code' => $address['postal_code'],
@@ -76,25 +133,44 @@ class OrderService
                 'shipping_fee' => $shipping,
                 'final_payment_amount' => $final,
                 'ordered_at' => now(),
+            ];
+
+            if ($deferCharge) {
+                // 같은 상품 구성의 결제대기 주문이 있으면 새로 만들지 않고 갱신한다.
+                $pending = Order::query()
+                    ->with('items')
+                    ->where('buyer_id', $buyer->id)
+                    ->where('order_status', 'PENDING_PAYMENT')
+                    ->lockForUpdate()
+                    ->latest('id')
+                    ->get()
+                    ->first(fn (Order $candidate) => $candidate->items->pluck('product_sku_id')->map(fn ($id) => (int) $id)->sort()->values()->all() === $skuIds);
+
+                if ($pending) {
+                    $pending->forceFill($fields)->save();
+                    $pending->items()->delete();
+                    $createItems($pending);
+
+                    return $pending;
+                }
+            }
+
+            $order = Order::query()->create($fields + [
+                'order_number' => $orderNumber,
+                'buyer_id' => $buyer->id,
+                'order_status' => $deferCharge ? 'PENDING_PAYMENT' : 'PAID',
             ]);
 
-            OrderItem::query()->create([
-                'order_id' => $order->id,
-                'product_sku_id' => $sku->id,
-                'store_id' => $store->id,
-                'applied_policy_id' => $policy->id,
-                'product_name' => $product->product_name,
-                'option_name' => $sku->option_name,
-                'unit_price' => $unit,
-                'quantity' => $quantity,
-                'item_amount' => $productAmount,
-                'item_status' => 'PREPARING',
-            ]);
+            $createItems($order);
+
+            if ($deferCharge) {
+                return $order;
+            }
 
             $result = $this->gateway->charge([
                 'orderNumber' => $orderNumber,
                 'amount' => $final,
-                'orderName' => $product->product_name,
+                'orderName' => $orderName,
                 'paymentKey' => $paymentKey,
             ]);
 
@@ -113,10 +189,115 @@ class OrderService
                 'paid_at' => now(),
             ]);
 
-            $this->takeStock($sku, $quantity);
+            foreach ($rows as $row) {
+                $this->takeStock($row['sku'], $row['quantity']);
+            }
+
+            $this->clearCart($buyer->id, $skuIds);
 
             return $order;
         });
+    }
+
+    public function orderName(array $productNames): string
+    {
+        $first = (string) ($productNames[0] ?? '');
+        $name = count($productNames) > 1 ? $first.' 외 '.(count($productNames) - 1).'건' : $first;
+
+        return mb_substr($name, 0, 100);
+    }
+
+    private function clearCart(int $buyerId, array $skuIds): void
+    {
+        CartItem::query()->where('buyer_id', $buyerId)->whereIn('product_sku_id', $skuIds)->delete();
+    }
+
+    public function confirmToss(Buyer $buyer, string $orderNumber, string $paymentKey, int $amount): Order
+    {
+        $order = Order::query()
+            ->with('items')
+            ->where('buyer_id', $buyer->id)
+            ->where('order_number', $orderNumber)
+            ->first();
+
+        if (! $order) {
+            throw ValidationException::withMessages(['order' => '주문을 찾을 수 없습니다.']);
+        }
+
+        if (in_array($order->order_status, ['PAID', 'ACCEPTED', 'PREPARING', 'SHIPPING', 'DELIVERED', 'CONFIRMED'], true) && $order->payments()->where('payment_status', 'PAID')->exists()) {
+            return $order;
+        }
+
+        if ($order->order_status !== 'PENDING_PAYMENT') {
+            throw ValidationException::withMessages(['order' => '결제할 수 없는 주문입니다.']);
+        }
+
+        if (ProductView::money($order->final_payment_amount) !== $amount) {
+            throw ValidationException::withMessages(['amount' => '결제 금액이 주문 금액과 다릅니다.']);
+        }
+
+        $result = $this->gateway->charge([
+            'orderNumber' => $order->order_number,
+            'amount' => $amount,
+            'orderName' => $this->orderName($order->items->pluck('product_name')->all()),
+            'paymentKey' => $paymentKey,
+        ]);
+
+        if (! $result->successful) {
+            throw ValidationException::withMessages([
+                'payment' => $result->message ?: '결제에 실패했습니다.',
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($order, $result, $amount) {
+                $locked = Order::query()->whereKey($order->id)->lockForUpdate()->first();
+
+                if ($locked->order_status !== 'PENDING_PAYMENT') {
+                    return;
+                }
+
+                $locked->load('items');
+
+                foreach ($locked->items as $item) {
+                    $sku = ProductSku::query()->whereKey($item->product_sku_id)->lockForUpdate()->first();
+
+                    if (! $sku || $sku->stock_quantity < $item->quantity) {
+                        throw new \RuntimeException('stock');
+                    }
+                }
+
+                foreach ($locked->items as $item) {
+                    $sku = ProductSku::query()->whereKey($item->product_sku_id)->lockForUpdate()->first();
+                    $this->takeStock($sku, (int) $item->quantity);
+                }
+
+                $locked->order_status = 'PAID';
+                $locked->save();
+
+                $this->clearCart((int) $locked->buyer_id, $locked->items->pluck('product_sku_id')->all());
+
+                Payment::query()->create([
+                    'order_id' => $locked->id,
+                    'payment_method' => 'toss',
+                    'payment_amount' => $amount,
+                    'payment_status' => 'PAID',
+                    'transaction_id' => $result->transactionId,
+                    'paid_at' => now(),
+                ]);
+            });
+        } catch (\RuntimeException) {
+            $this->gateway->refund([
+                'transactionId' => $result->transactionId,
+                'orderNumber' => $order->order_number,
+                'amount' => $amount,
+                'reason' => '재고 부족으로 결제를 취소합니다.',
+            ]);
+
+            throw ValidationException::withMessages(['quantity' => '재고가 부족해 결제를 취소했습니다.']);
+        }
+
+        return $order->fresh();
     }
 
     public function requestCancel(Buyer $buyer, Order $order, string $reason): void
@@ -124,10 +305,11 @@ class OrderService
         DB::transaction(function () use ($buyer, $order, $reason) {
             $order = $this->lockBuyerOrder($buyer, $order);
 
-            if (! in_array($order->order_status, ['PAID', 'PREPARING'], true)) {
+            if (! in_array($order->order_status, ['PAID', 'ACCEPTED', 'PREPARING'], true)) {
                 throw ValidationException::withMessages(['order' => '발송 전 주문만 취소할 수 있습니다.']);
             }
 
+            $this->guardRefunded($order);
             $this->guardOpenClaim($order);
 
             $claim = OrderClaim::query()->create([
@@ -153,11 +335,13 @@ class OrderService
     {
         DB::transaction(function () use ($buyer, $order, $itemId, $exchangeSkuId, $quantity, $reason) {
             $order = $this->lockBuyerOrder($buyer, $order);
+            $reason = $this->assertReason($reason, '교환');
 
             if ($order->order_status === 'CANCELED') {
                 throw ValidationException::withMessages(['order' => '취소된 주문은 교환할 수 없습니다.']);
             }
 
+            $this->guardRefunded($order);
             $this->guardOpenClaim($order);
             $item = $order->items->firstWhere('id', $itemId);
 
@@ -174,6 +358,11 @@ class OrderService
 
             if (! $current || ! $exchange || $exchange->product_id !== $current->product_id) {
                 throw ValidationException::withMessages(['exchange_product_sku_id' => '같은 상품의 옵션만 교환할 수 있습니다.']);
+            }
+
+            // 품절(SOLD_OUT) 옵션도 요청은 받는다. 재고 확인은 판매자가 승인할 때 한다.
+            if (! in_array($exchange->status, ['ON_SALE', 'SOLD_OUT'], true)) {
+                throw ValidationException::withMessages(['exchange_product_sku_id' => '판매가 중단된 옵션으로는 교환할 수 없습니다.']);
             }
 
             $claim = OrderClaim::query()->create([
@@ -194,6 +383,51 @@ class OrderService
         });
     }
 
+    public function requestReturn(Buyer $buyer, Order $order, string $reason): void
+    {
+        DB::transaction(function () use ($buyer, $order, $reason) {
+            $order = $this->lockBuyerOrder($buyer, $order);
+            $reason = $this->assertReason($reason, '환불');
+
+            if (! in_array($order->order_status, ['DELIVERED', 'CONFIRMED'], true)) {
+                throw ValidationException::withMessages(['order' => '배송이 완료된 주문만 환불을 요청할 수 있습니다.']);
+            }
+
+            $this->guardRefunded($order);
+            $this->guardOpenClaim($order);
+
+            $claim = OrderClaim::query()->create([
+                'claim_number' => $this->number('M'),
+                'order_id' => $order->id,
+                'claim_type' => 'RETURN',
+                'claim_status' => 'REQUESTED',
+                'reason_code' => 'BUYER',
+                'reason_detail' => $reason,
+                'requested_at' => now(),
+            ]);
+
+            foreach ($order->items as $item) {
+                $claim->items()->create([
+                    'order_item_id' => $item->id,
+                    'quantity' => $item->quantity,
+                ]);
+            }
+        });
+    }
+
+    public function hideFromBuyer(Buyer $buyer, Order $order): void
+    {
+        DB::transaction(function () use ($buyer, $order) {
+            $order = $this->lockBuyerOrder($buyer, $order);
+
+            if (! in_array($order->order_status, ['CANCELED', 'DELIVERED', 'CONFIRMED'], true)) {
+                throw ValidationException::withMessages(['order' => '취소되었거나 배송이 완료된 주문만 삭제할 수 있습니다.']);
+            }
+
+            $order->forceFill(['buyer_hidden_at' => now()])->save();
+        });
+    }
+
     public function progress(Store $store, Order $order, string $action, ?int $carrierId = null): void
     {
         DB::transaction(function () use ($store, $order, $action, $carrierId) {
@@ -201,8 +435,8 @@ class OrderService
             $order->load('shipments');
             $shipment = $order->shipments->firstWhere('shipment_type', 'OUTBOUND');
 
-            if ($order->claims()->where('claim_status', 'REQUESTED')->where('claim_type', 'CANCEL')->exists()) {
-                throw ValidationException::withMessages(['action' => '취소 요청을 먼저 처리해 주세요.']);
+            if ($order->claims()->where('claim_status', 'REQUESTED')->exists()) {
+                throw ValidationException::withMessages(['action' => '취소·환불·교환 요청을 먼저 처리해 주세요.']);
             }
 
             $carrier = null;
@@ -219,6 +453,17 @@ class OrderService
 
             if ($action === 'approve') {
                 if ($order->order_status !== 'PAID') {
+                    throw ValidationException::withMessages(['action' => '이 주문은 지금 그 상태로 바꿀 수 없습니다.']);
+                }
+
+                $order->order_status = 'ACCEPTED';
+                $order->save();
+
+                return;
+            }
+
+            if ($action === 'prepare') {
+                if ($order->order_status !== 'ACCEPTED') {
                     throw ValidationException::withMessages(['action' => '이 주문은 지금 그 상태로 바꿀 수 없습니다.']);
                 }
 
@@ -243,11 +488,9 @@ class OrderService
             }
 
             if ($action === 'ship') {
-                if ($order->order_status !== 'PREPARING') {
-                    throw ValidationException::withMessages(['action' => '이 주문은 지금 그 상태로 바꿀 수 없습니다.']);
+                if ($order->order_status !== 'PREPARING' || ! $shipment || $shipment->shipment_status !== 'PREPARING') {
+                    throw ValidationException::withMessages(['action' => '배송 준비를 먼저 해 주세요.']);
                 }
-
-                $shipment = $shipment ?: $this->outboundShipment($order, $store);
                 $shipment->carrier_id = $carrier->id;
                 $shipment->shipment_status = 'SHIPPING';
                 $shipment->dispatched_at = now();
@@ -325,11 +568,31 @@ class OrderService
                     throw ValidationException::withMessages(['decision' => '교환 요청만 승인할 수 있습니다.']);
                 }
 
+                foreach ($claim->items as $claimItem) {
+                    $target = ProductSku::query()->find($claimItem->exchange_product_sku_id);
+
+                    if (! $target || $target->status === 'STOPPED' || $target->stock_quantity < $claimItem->quantity) {
+                        throw ValidationException::withMessages([
+                            'decision' => '교환할 옵션의 재고가 부족합니다. 재고를 채운 뒤 승인하거나 요청을 거절해 주세요.',
+                        ]);
+                    }
+                }
+
                 $claim->forceFill([
                     'claim_status' => 'APPROVED',
                     'responded_at' => now(),
                     'seller_response' => '교환 승인',
                 ])->save();
+
+                return;
+            }
+
+            if ($claim->claim_type === 'RETURN' && $decision === 'approve') {
+                if ($status !== 'REQUESTED') {
+                    throw ValidationException::withMessages(['decision' => '환불 요청만 수락할 수 있습니다.']);
+                }
+
+                $this->refundAndRestock($order, $claim, 'RETURNED', null, '환불 수락, 결제 취소, 재고 복원');
 
                 return;
             }
@@ -355,8 +618,9 @@ class OrderService
     public function buyerOrders(Buyer $buyer): array
     {
         $orders = Order::query()
-            ->with(['payments', 'items', 'claims', 'shipments.carrier'])
+            ->with(['payments.refunds', 'items', 'claims', 'shipments.carrier'])
             ->where('buyer_id', $buyer->id)
+            ->whereNull('buyer_hidden_at')
             ->orderByDesc('ordered_at')
             ->get();
 
@@ -368,8 +632,11 @@ class OrderService
 
         return $orders->map(function (Order $order) use ($skus) {
             $open = $order->claims->contains(fn ($claim) => $claim->claim_status === 'REQUESTED');
+            $refunded = $this->isRefunded($order);
             $code = $order->order_status;
+            $statusName = $this->claimHeadline($order) ?? StatusLabel::name('order', $code);
             $payment = $order->payments->sortByDesc('id')->first();
+            $refundAmount = $order->payments->sum(fn (Payment $payment) => $payment->refunds->sum(fn (Refund $refund) => (float) $refund->refund_amount));
             $shipment = $order->shipments->firstWhere('shipment_type', 'OUTBOUND');
             $trackingNumber = $shipment?->tracking_number;
             $template = $shipment?->carrier?->tracking_url_template;
@@ -381,11 +648,15 @@ class OrderService
                 'id' => $order->id,
                 'orderNumber' => $order->order_number,
                 'orderedAt' => $order->ordered_at?->format('Y-m-d H:i'),
-                'statusName' => StatusLabel::name('order', $code),
+                'statusName' => $statusName,
+                'claimNote' => $this->claimNote($order),
                 'paymentStatus' => StatusLabel::name('payment', $payment?->payment_status),
+                'refundAmount' => ProductView::money($refundAmount),
                 'finalPaymentAmount' => ProductView::money($order->final_payment_amount),
-                'canCancel' => in_array($code, ['PAID', 'PREPARING'], true) && ! $open,
-                'canExchange' => $code !== 'CANCELED' && ! $open,
+                'canCancel' => in_array($code, ['PAID', 'ACCEPTED', 'PREPARING'], true) && ! $open && ! $refunded,
+                'canExchange' => ! in_array($code, ['CANCELED', 'PENDING_PAYMENT'], true) && ! $open && ! $refunded,
+                'canReturn' => in_array($code, ['DELIVERED', 'CONFIRMED'], true) && ! $open && ! $refunded,
+                'canDelete' => in_array($code, ['CANCELED', 'DELIVERED', 'CONFIRMED'], true),
                 'tracking' => [
                     'shipped' => in_array($code, ['SHIPPING', 'DELIVERED'], true),
                     'carrier' => $shipment?->carrier?->carrier_name,
@@ -409,7 +680,8 @@ class OrderService
                             'id' => $option->id,
                             'name' => $option->option_name,
                             'stock' => $option->stock_quantity,
-                            'soldOut' => $option->status === 'SOLD_OUT',
+                            'soldOut' => $option->status === 'SOLD_OUT' || $option->stock_quantity < 1,
+                            'stopped' => $option->status === 'STOPPED',
                         ])->values(),
                     ];
                 })->values(),
@@ -417,12 +689,79 @@ class OrderService
         })->values()->all();
     }
 
+    private function claimHeadline(Order $order): ?string
+    {
+        if (! $order->relationLoaded('claims')) {
+            return null;
+        }
+
+        $claims = $order->claims;
+
+        if ($order->order_status !== 'CANCELED' && $claims->contains(fn (OrderClaim $claim) => $claim->claim_type === 'CANCEL' && $claim->claim_status === 'REQUESTED')) {
+            return '취소요청';
+        }
+
+        if ($claims->contains(fn (OrderClaim $claim) => $claim->claim_type === 'RETURN' && in_array($claim->claim_status, ['REQUESTED', 'APPROVED', 'PICKING_UP'], true))) {
+            return '환불요청';
+        }
+
+        if ($claims->contains(fn (OrderClaim $claim) => $claim->claim_type === 'RETURN' && $claim->claim_status === 'COMPLETED')) {
+            return '환불완료';
+        }
+
+        if ($order->order_status !== 'CANCELED' && $claims->contains(fn (OrderClaim $claim) => $claim->claim_type === 'EXCHANGE' && in_array($claim->claim_status, ['REQUESTED', 'APPROVED', 'PICKING_UP'], true))) {
+            return '교환요청';
+        }
+
+        return null;
+    }
+
+    private function claimNote(Order $order): ?string
+    {
+        $latest = $order->claims->sortByDesc('id')->first();
+
+        if (! $latest) {
+            return null;
+        }
+
+        $name = match ($latest->claim_type) {
+            'CANCEL' => '취소',
+            'RETURN' => '환불',
+            default => '교환',
+        };
+
+        if ($latest->claim_status === 'REJECTED') {
+            $reason = trim((string) $latest->reject_reason);
+
+            return $reason !== '' ? $name.' 요청이 거절되었습니다. 사유: '.$reason : $name.' 요청이 거절되었습니다.';
+        }
+
+        if ($latest->claim_status === 'REQUESTED') {
+            return '판매자 확인을 기다리고 있습니다.';
+        }
+
+        if ($latest->claim_status === 'COMPLETED' && in_array($latest->claim_type, ['CANCEL', 'RETURN'], true)) {
+            return '환불이 완료되었습니다.';
+        }
+
+        if ($latest->claim_type === 'EXCHANGE' && $latest->claim_status === 'APPROVED') {
+            return '교환이 승인되었습니다.';
+        }
+
+        if ($latest->claim_type === 'EXCHANGE' && $latest->claim_status === 'COMPLETED') {
+            return '교환 처리가 완료되었습니다.';
+        }
+
+        return null;
+    }
+
     public function sellerRows(Store $store, ?string $keyword, ?string $status): array
     {
         $keyword = trim((string) $keyword);
 
         return Order::query()
-            ->with(['payments', 'items'])
+            ->with(['payments.refunds', 'items', 'claims'])
+            ->where('order_status', '!=', 'PENDING_PAYMENT')
             ->whereHas('items', fn ($query) => $query->where('store_id', $store->id))
             ->when($keyword !== '', function ($query) use ($store, $keyword) {
                 $term = '%'.addcslashes($keyword, '%_\\').'%';
@@ -430,7 +769,11 @@ class OrderService
                     ->where('store_id', $store->id)
                     ->where('product_name', 'ilike', $term));
             })
-            ->when($status === 'PREPARING', fn ($query) => $query->where('order_status', 'PREPARING'))
+            ->when($status === 'PAID', fn ($query) => $query->where('order_status', 'PAID'))
+            ->when($status === 'CLAIM', fn ($query) => $query->whereHas(
+                'claims',
+                fn ($claims) => $claims->where('claim_status', 'REQUESTED')->whereIn('claim_type', ['CANCEL', 'RETURN']),
+            ))
             ->orderByDesc('ordered_at')
             ->get()
             ->map(fn (Order $order) => $this->sellerSummary($order))
@@ -440,6 +783,7 @@ class OrderService
 
     public function sellerDetail(Store $store, Order $order): array
     {
+        abort_if($order->order_status === 'PENDING_PAYMENT', 404);
         $this->assertStoreOrder($store, $order);
         $order->load([
             'payments.refunds',
@@ -451,7 +795,7 @@ class OrderService
 
         $summary = $this->sellerSummary($order);
         $code = $order->order_status;
-        $cancelOpen = $order->claims->contains(fn ($claim) => $claim->claim_type === 'CANCEL' && $claim->claim_status === 'REQUESTED');
+        $openClaim = $order->claims->contains(fn ($claim) => $claim->claim_status === 'REQUESTED');
         $shipment = $order->shipments->firstWhere('shipment_type', 'OUTBOUND');
 
         return $summary + [
@@ -464,11 +808,11 @@ class OrderService
             'carrierId' => $shipment?->carrier_id,
             'shipmentStatus' => $shipment ? StatusLabel::name('shipment', $shipment->shipment_status) : null,
             'actions' => [
-                'approve' => false,
-                'prepare' => false,
-                'ready' => false,
-                'ship' => $code === 'PREPARING' && ! $cancelOpen,
-                'deliver' => $code === 'SHIPPING' && ! $cancelOpen,
+                'approve' => $code === 'PAID' && ! $openClaim,
+                'prepare' => $code === 'ACCEPTED' && ! $openClaim,
+                'ready' => $code === 'PREPARING' && ! $shipment && ! $openClaim,
+                'ship' => $code === 'PREPARING' && $shipment?->shipment_status === 'PREPARING' && ! $openClaim,
+                'deliver' => $code === 'SHIPPING' && ! $openClaim,
             ],
             'claims' => $order->claims->map(fn (OrderClaim $claim) => $this->presentClaim($claim))->values(),
         ];
@@ -527,7 +871,7 @@ class OrderService
             'id' => $order->id,
             'orderNumber' => $order->order_number,
             'orderedAt' => $order->ordered_at?->format('Y-m-d H:i'),
-            'statusName' => StatusLabel::name('order', $order->order_status),
+            'statusName' => $this->claimHeadline($order) ?? StatusLabel::name('order', $order->order_status),
             'statusCode' => $order->order_status,
             'recipient' => $order->recipient_name,
             'amount' => ProductView::money($order->final_payment_amount),
@@ -561,7 +905,9 @@ class OrderService
         $stock = null;
 
         if ($exchange && $orderItem) {
-            $exchangeUnit = ProductView::money($exchange->product?->sale_price) + ProductView::money($exchange->additional_price);
+            $exchangeUnit = $exchange->product
+                ? ProductView::skuSale($exchange->product, $exchange)
+                : ProductView::money($exchange->sale_price);
             $difference = ($exchangeUnit - ProductView::money($orderItem->unit_price)) * $item->quantity;
             $stock = $exchange->stock_quantity;
         }
@@ -572,7 +918,11 @@ class OrderService
             'id' => $claim->id,
             'number' => $claim->claim_number,
             'type' => $claim->claim_type,
-            'typeName' => $claim->claim_type === 'CANCEL' ? '취소' : '교환',
+            'typeName' => match ($claim->claim_type) {
+                'CANCEL' => '취소',
+                'RETURN' => '환불',
+                default => '교환',
+            },
             'status' => StatusLabel::name('claim', $code),
             'statusCode' => $code,
             'reason' => $claim->reason_detail,
@@ -590,7 +940,7 @@ class OrderService
         ];
     }
 
-    private function refundAndRestock(Order $order, OrderClaim $claim): void
+    private function refundAndRestock(Order $order, OrderClaim $claim, string $itemStatus = 'CANCELED', ?string $orderStatus = 'CANCELED', string $sellerResponse = '취소 승인, 결제 취소, 재고 복원'): void
     {
         $payment = $order->payments()->lockForUpdate()->latest('id')->first();
 
@@ -635,17 +985,20 @@ class OrderService
             }
         }
 
-        $order->forceFill([
-            'order_status' => 'CANCELED',
-            'canceled_at' => now(),
-        ])->save();
-        $order->items()->update(['item_status' => 'CANCELED']);
+        if ($orderStatus !== null) {
+            $order->forceFill([
+                'order_status' => $orderStatus,
+                'canceled_at' => now(),
+            ])->save();
+        }
+
+        $order->items()->update(['item_status' => $itemStatus]);
 
         $claim->forceFill([
             'claim_status' => 'COMPLETED',
             'responded_at' => now(),
             'completed_at' => now(),
-            'seller_response' => '취소 승인, 결제 취소, 재고 복원',
+            'seller_response' => $sellerResponse,
         ])->save();
     }
 
@@ -726,6 +1079,19 @@ class OrderService
         return $fee;
     }
 
+    private function assertReason(string $reason, string $label): string
+    {
+        $reason = trim($reason);
+
+        if (mb_strlen($reason) < 5) {
+            throw ValidationException::withMessages([
+                'reason_detail' => $label.' 사유는 5자 이상 입력해 주세요.',
+            ]);
+        }
+
+        return $reason;
+    }
+
     private function lockBuyerOrder(Buyer $buyer, Order $order): Order
     {
         $locked = Order::query()->where('buyer_id', $buyer->id)->whereKey($order->id)->lockForUpdate()->first();
@@ -734,7 +1100,7 @@ class OrderService
             throw ValidationException::withMessages(['order' => '주문을 찾을 수 없습니다.']);
         }
 
-        $locked->load('items', 'claims');
+        $locked->load('items', 'claims', 'payments');
 
         return $locked;
     }
@@ -761,6 +1127,23 @@ class OrderService
 
         if (! $ownsAll) {
             abort(404);
+        }
+    }
+
+    private function isRefunded(Order $order): bool
+    {
+        $order->loadMissing('items', 'claims', 'payments');
+
+        return $order->order_status === 'CANCELED'
+            || $order->payments->contains(fn ($payment) => $payment->payment_status === 'CANCELED')
+            || $order->claims->contains(fn ($claim) => $claim->claim_status === 'COMPLETED' && in_array($claim->claim_type, ['CANCEL', 'RETURN'], true))
+            || $order->items->contains(fn ($item) => in_array($item->item_status, ['RETURNED', 'CANCELED'], true));
+    }
+
+    private function guardRefunded(Order $order): void
+    {
+        if ($this->isRefunded($order)) {
+            throw ValidationException::withMessages(['order' => '이미 환불이 완료된 주문입니다.']);
         }
     }
 

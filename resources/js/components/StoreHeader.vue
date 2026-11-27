@@ -1,7 +1,8 @@
 <script setup>
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import axios from 'axios';
 
-defineProps({
+const props = defineProps({
     shortcuts: {
         type: Array,
         default: () => [],
@@ -11,6 +12,27 @@ defineProps({
         default: null,
     },
 });
+
+const cartCount = ref(0);
+
+const loadCartCount = async () => {
+    if (!props.buyer) {
+        return;
+    }
+
+    try {
+        const { data } = await axios.get('/cart/count');
+        cartCount.value = data.count;
+    } catch {
+        cartCount.value = 0;
+    }
+};
+
+onMounted(() => {
+    loadCartCount();
+    window.addEventListener('cart-updated', loadCartCount);
+});
+onBeforeUnmount(() => window.removeEventListener('cart-updated', loadCartCount));
 
 const logout = async () => {
     const { data } = await axios.post('/logout');
@@ -45,11 +67,11 @@ const logout = async () => {
                     <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10.5 12 4l8 6.5V20H4Z" /><path d="M10 20v-6h4v6" /></svg>
                     마이쇼핑
                 </a>
-                <button type="button" class="relative flex flex-col items-center gap-1">
+                <a :href="buyer ? '/cart' : '/login'" class="relative flex flex-col items-center gap-1">
                     <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8h12l-1 11H7L6 8Z" /><path d="M9 8V7a3 3 0 0 1 6 0v1" /></svg>
-                    <span class="absolute top-0 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">0</span>
+                    <span v-if="cartCount > 0" class="absolute top-0 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">{{ cartCount > 99 ? '99+' : cartCount }}</span>
                     장바구니
-                </button>
+                </a>
             </div>
         </div>
 

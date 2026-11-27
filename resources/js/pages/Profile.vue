@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 import axios from 'axios';
 import StoreHeader from '../components/StoreHeader.vue';
 
@@ -89,8 +89,12 @@ const statusTone = (name) => {
         return 'text-emerald-600';
     }
 
-    if (name?.includes('취소')) {
+    if (name?.includes('취소') || name === '환불완료') {
         return 'text-neutral-400';
+    }
+
+    if (name?.includes('요청')) {
+        return 'text-brand';
     }
 
     return 'text-ink';
@@ -98,21 +102,38 @@ const statusTone = (name) => {
 const claimForms = reactive({});
 const claimPanel = ref(null);
 const claimError = ref('');
+const claimOrder = ref(null);
+const claimType = ref('');
+const claimReason = ref('');
+const claimSkuId = ref('');
+const claimItemId = ref('');
+const claimItem = computed(() => claimOrder.value?.items?.find((item) => item.id === claimItemId.value) || claimOrder.value?.items?.[0] || null);
+const firstAvailableOption = (item) => item?.exchangeOptions?.find((option) => !option.stopped && !option.soldOut)?.id || '';
+const changeClaimItem = () => {
+    claimSkuId.value = firstAvailableOption(claimItem.value);
+};
 
 props.orders.forEach((order) => {
     claimForms[order.id] = {
         reason: '',
         order_item_id: order.items[0]?.id || '',
-        exchange_product_sku_id: order.items[0]?.exchangeOptions?.[0]?.id || '',
         quantity: order.items[0]?.quantity || 1,
     };
 });
 
-const openClaim = (order, type) => {
+const openClaim = (order) => {
     claimError.value = '';
-    claimPanel.value = claimPanel.value?.id === order.id && claimPanel.value?.type === type
-        ? null
-        : { id: order.id, type };
+    claimPanel.value = claimPanel.value?.id === order.id ? null : { id: order.id, type: 'cancel' };
+};
+
+const openReasonPopup = (order, type) => {
+    claimOrder.value = order;
+    claimType.value = type;
+    claimReason.value = '';
+    claimItemId.value = order.items[0]?.id || '';
+    claimSkuId.value = firstAvailableOption(order.items[0]);
+    formError.value = '';
+    popup.value = 'claim';
 };
 
 const trackOrder = (order) => {
@@ -121,26 +142,52 @@ const trackOrder = (order) => {
     }
 };
 
-const sendClaim = async (order, type) => {
+const sendClaim = async (order) => {
     claimError.value = '';
     const form = claimForms[order.id];
 
     try {
-        const url = type === 'cancel' ? `/orders/${order.id}/cancel` : `/orders/${order.id}/exchange`;
-        const payload = type === 'cancel'
-            ? { reason_detail: form.reason }
-            : {
-                order_item_id: form.order_item_id,
-                exchange_product_sku_id: form.exchange_product_sku_id,
-                quantity: form.quantity,
-                reason_detail: form.reason,
-            };
-        const { data } = await axios.post(url, payload);
+        const { data } = await axios.post(`/orders/${order.id}/cancel`, {
+            reason_detail: form.reason,
+        });
         window.location.href = data.redirect;
     } catch (error) {
         const errors = error.response?.data?.errors || {};
         claimError.value = Object.values(errors)[0]?.[0] || error.response?.data?.message || '요청에 실패했습니다.';
     }
+};
+
+const sendReasonPopup = async () => {
+    formError.value = '';
+    const reason = claimReason.value.trim();
+
+    if (reason.length < 5) {
+        formError.value = '사유는 5자 이상 입력해 주세요.';
+        return;
+    }
+
+    const order = claimOrder.value;
+
+    try {
+        const payload = claimType.value === 'exchange'
+            ? {
+                order_item_id: claimItem.value?.id,
+                exchange_product_sku_id: claimSkuId.value,
+                quantity: claimItem.value?.quantity || 1,
+                reason_detail: reason,
+            }
+            : { reason_detail: reason };
+        const url = claimType.value === 'exchange' ? `/orders/${order.id}/exchange` : `/orders/${order.id}/return`;
+        const { data } = await axios.post(url, payload);
+        window.location.href = data.redirect;
+    } catch (error) {
+        formError.value = firstError(error) || error.response?.data?.message || '요청에 실패했습니다.';
+    }
+};
+
+const removeOrder = async () => {
+    await axios.delete(`/orders/${deleting.value.id}`);
+    window.location.reload();
 };
 
 const closePopup = () => {
@@ -312,7 +359,12 @@ const firstError = (error) => {
                 <p v-if="orders.length === 0" class="py-8 text-center text-sm text-neutral-500">아직 주문 내역이 없습니다.</p>
                 <article v-for="order in orders" :key="order.id" class="mt-4 rounded-2xl border border-neutral-200 p-4">
                     <div class="flex items-center justify-between gap-3">
-                        <p class="text-[22px] font-extrabold leading-none" :class="statusTone(order.statusName)">{{ order.statusName }}</p>
+                        <div>
+                            <p class="text-[22px] font-extrabold leading-none" :class="statusTone(order.statusName)">{{ order.statusName }}</p>
+                            <p v-if="order.claimNote" class="mt-1 text-sm text-neutral-500">{{ order.claimNote }}</p>
+                            <p v-if="order.refundAmount" class="mt-1 text-sm font-medium">환불 {{ won(order.refundAmount) }} · {{ order.paymentStatus }}</p>
+                            <p v-else class="mt-1 text-sm text-neutral-500">{{ order.paymentStatus }}</p>
+                        </div>
                         <div class="text-right leading-tight">
                             <p class="text-sm font-medium text-brand">{{ order.orderNumber }}</p>
                             <p class="mt-0.5 text-sm text-neutral-500">{{ orderHeading(order.orderedAt) }}</p>
@@ -332,20 +384,15 @@ const firstError = (error) => {
                         </div>
                         <div class="flex w-full shrink-0 flex-col gap-2 sm:w-36">
                             <button type="button" class="h-10 rounded-lg border border-brand text-sm font-medium text-brand" @click="trackOrder(order)">배송 조회</button>
-                            <button v-if="order.canCancel" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openClaim(order, 'cancel')">취소 요청</button>
-                            <button v-if="order.canExchange" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openClaim(order, 'exchange')">교환 요청</button>
+                            <button v-if="order.canCancel" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openClaim(order)">취소 요청</button>
+                            <button v-if="order.canExchange" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openReasonPopup(order, 'exchange')">교환 요청</button>
+                            <button v-if="order.canReturn" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="openReasonPopup(order, 'return')">환불 요청</button>
+                            <button v-if="order.canDelete" type="button" class="h-10 rounded-lg border border-neutral-300 text-sm font-medium" @click="deleting = order; popup = 'order-delete'">주문내역 삭제</button>
                         </div>
                     </div>
                     <div v-if="claimPanel?.id === order.id" class="mt-4 space-y-2 border-t border-neutral-100 pt-4">
-                        <input v-model="claimForms[order.id].reason" type="text" placeholder="사유" class="h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-brand">
-                        <select v-if="claimPanel.type === 'exchange'" v-model="claimForms[order.id].exchange_product_sku_id" class="h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm">
-                            <option v-for="option in order.items[0]?.exchangeOptions || []" :key="option.id" :value="option.id">
-                                {{ option.name }} · 재고 {{ option.stock }}
-                            </option>
-                        </select>
-                        <button type="button" class="h-10 rounded-lg bg-brand px-4 text-sm font-bold text-white" @click="sendClaim(order, claimPanel.type)">
-                            {{ claimPanel.type === 'cancel' ? '취소 요청하기' : '교환 요청하기' }}
-                        </button>
+                        <input v-model="claimForms[order.id].reason" type="text" placeholder="취소 사유" class="h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-brand">
+                        <button type="button" class="h-10 rounded-lg bg-brand px-4 text-sm font-bold text-white" @click="sendClaim(order)">취소 요청하기</button>
                         <p v-if="claimError" class="text-xs text-brand">{{ claimError }}</p>
                     </div>
                 </article>
@@ -382,6 +429,8 @@ const firstError = (error) => {
                         {{ popup === 'payment' ? (editingPayment ? '결제 수단 변경' : '결제 수단 추가') : '' }}
                         {{ popup === 'address-delete' ? '배송지 삭제' : '' }}
                         {{ popup === 'payment-delete' ? '결제 수단 삭제' : '' }}
+                        {{ popup === 'order-delete' ? '주문내역 삭제' : '' }}
+                        {{ popup === 'claim' ? (claimType === 'exchange' ? '교환 요청' : '환불 요청') : '' }}
                         {{ popup === 'withdraw' ? '회원탈퇴' : '' }}
                     </h2>
                     <button type="button" class="text-xl text-neutral-400" @click="closePopup">×</button>
@@ -413,6 +462,32 @@ const firstError = (error) => {
                     <label class="flex items-center gap-2 text-sm"><input v-model="paymentForm.is_default" type="checkbox" class="accent-brand">기본 결제 수단으로 설정</label>
                     <button type="submit" class="h-11 w-full rounded-lg bg-brand text-sm font-bold text-white">저장</button>
                 </form>
+
+                <form v-else-if="popup === 'claim'" class="mt-5 space-y-3" @submit.prevent="sendReasonPopup">
+                    <p class="text-sm text-neutral-600">{{ claimType === 'exchange' ? claimItem?.name : claimOrder?.items?.[0]?.name }}<span v-if="claimType !== 'exchange' && claimOrder?.items?.length > 1"> 외 {{ claimOrder.items.length - 1 }}건</span> 사유를 5자 이상 입력해 주세요.</p>
+                    <select v-if="claimType === 'exchange' && claimOrder?.items?.length > 1" v-model="claimItemId" class="h-11 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-brand" @change="changeClaimItem">
+                        <option v-for="item in claimOrder.items" :key="item.id" :value="item.id">{{ item.name }} · {{ item.option }} ({{ item.quantity }}개)</option>
+                    </select>
+                    <select v-if="claimType === 'exchange'" v-model="claimSkuId" class="h-11 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-brand">
+                        <option value="" disabled>교환할 옵션</option>
+                        <option v-for="option in claimItem?.exchangeOptions || []" :key="option.id" :value="option.id" :disabled="option.stopped">
+                            {{ option.name }} · {{ option.stopped ? '판매 중단' : option.soldOut ? '품절 (재입고 후 교환)' : `재고 ${option.stock}` }}
+                        </option>
+                    </select>
+                    <p v-if="claimType === 'exchange' && (claimItem?.exchangeOptions || []).some((option) => option.id === claimSkuId && option.soldOut)" class="rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-600">
+                        선택한 옵션은 현재 품절입니다. 요청은 접수되지만, 판매자가 재고를 채워 승인해야 교환이 진행됩니다. 원하지 않으면 환불을 요청할 수 있어요.
+                    </p>
+                    <textarea v-model="claimReason" rows="4" maxlength="500" placeholder="사유 (5자 이상)" class="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-brand"></textarea>
+                    <button type="submit" class="h-11 w-full rounded-lg bg-brand text-sm font-bold text-white">{{ claimType === 'exchange' ? '교환 요청하기' : '환불 요청하기' }}</button>
+                </form>
+
+                <div v-else-if="popup === 'order-delete'" class="mt-5">
+                    <p class="text-sm text-neutral-600">이 주문을 내 주문내역에서 삭제합니다. 판매자의 주문 기록은 남습니다.</p>
+                    <div class="mt-5 flex gap-2">
+                        <button type="button" class="h-11 flex-1 rounded-lg border border-neutral-300 text-sm" @click="closePopup">취소</button>
+                        <button type="button" class="h-11 flex-1 rounded-lg bg-brand text-sm font-bold text-white" @click="removeOrder">삭제</button>
+                    </div>
+                </div>
 
                 <div v-else-if="popup === 'address-delete' || popup === 'payment-delete'" class="mt-5">
                     <p class="text-sm text-neutral-600">삭제하면 목록에서 바로 사라집니다.</p>
